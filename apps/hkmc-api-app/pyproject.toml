@@ -1,0 +1,15 @@
+[project]
+name = "hkmc-api-app"
+version = "0.1.0"
+description = "HKMC API 연동 앱"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hkmc_api_app"]
