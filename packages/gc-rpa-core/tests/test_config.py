@@ -7,6 +7,7 @@ from gc_rpa_core import config
 
 ROW = {
     "actprg_id": 3,
+    "actprg_nm": "test_actprg_nm",
     "actprg_bc": "test_actprg_bc",
     "rpa_site": " https://test-site.invalid ",
     "rpa_id": "test_rpa_id",
@@ -66,6 +67,7 @@ def test_load_calls_stored_procedure(fake_cursor: Any) -> None:
     query, params = opened.executed[0]
     assert "ITM250_Schedule" in query
     assert params == ("GetActProgram", "1")
+    assert settings.name == "test_actprg_nm"
     assert settings.url == "https://test-site.invalid"
     assert settings.user_id == "test_rpa_id"
     assert settings.password == "test_rpa_pw"

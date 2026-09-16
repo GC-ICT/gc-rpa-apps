@@ -23,6 +23,7 @@ def text(row: dict[str, Any], column: str) -> str:
 
 @dataclass(frozen=True)
 class RpaConfig:
+    name: str
     url: str
     user_id: str
     password: str
@@ -41,6 +42,7 @@ def load(schedule_id: str) -> RpaConfig:
         raise LookupError(f"{PROCEDURE} 에 schedule_id={schedule_id!r} 설정이 없다")
 
     return RpaConfig(
+        name=text(row, "actprg_nm"),
         url=text(row, "rpa_site"),
         user_id=text(row, "rpa_id"),
         password=text(row, "rpa_pw"),

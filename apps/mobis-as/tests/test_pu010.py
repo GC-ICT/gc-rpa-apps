@@ -1,6 +1,22 @@
+from pathlib import Path
+
 import pytest
 
+from gc_rpa_core.config import RpaConfig
 from mobis_as import pu010
+
+
+def _settings(name: str) -> RpaConfig:
+    return RpaConfig(
+        name=name,
+        url="https://test-site.invalid",
+        user_id="test_user",
+        password="test_pw",
+        otp="test_otp",
+        use_otp=True,
+        move_path="test_move_dir",
+        exe_name="test_app.exe",
+    )
 
 
 def test_schedule_id_defaults_to_one(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,9 +61,24 @@ def test_main_returns_one_and_reports_failure(monkeypatch: pytest.MonkeyPatch) -
     def fail(**_: object) -> None:
         raise ValueError("다운로드 실패")
 
+    monkeypatch.setattr(entry.pu010, "load", lambda: _settings("테스트 RPA"))
     monkeypatch.setattr(entry.pu010, "run", fail)
     monkeypatch.setattr(entry.hub, "report", lambda **kw: sent.update(kw))
 
     assert entry.main() == 1
     assert sent["success"] is False
+    assert sent["name"] == "테스트 RPA"
     assert "다운로드 실패" in str(sent["message"])
+
+
+def test_main_falls_back_when_config_has_no_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mobis_as import __main__ as entry
+
+    sent: dict[str, object] = {}
+
+    monkeypatch.setattr(entry.pu010, "load", lambda: _settings(""))
+    monkeypatch.setattr(entry.pu010, "run", lambda **_: Path("x.xlsx"))
+    monkeypatch.setattr(entry.hub, "report", lambda **kw: sent.update(kw))
+
+    assert entry.main() == 0
+    assert sent["name"] == entry.FALLBACK_SYSTEM

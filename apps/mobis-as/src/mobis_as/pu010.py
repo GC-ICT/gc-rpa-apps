@@ -30,9 +30,13 @@ def schedule_id() -> str:
     return optional_env(SCHEDULE_ID_ENV, DEFAULT_SCHEDULE_ID)
 
 
+def load() -> config.RpaConfig:
+    return config.load(schedule_id())
+
+
 def run(*, headless: bool = False) -> Path:
-    logger.info("[1/6] 설정 조회   schedule_id=%s", schedule_id())
-    settings = config.load(schedule_id())
+    settings = load()
+    logger.info("[1/6] 설정 조회   %s (schedule_id=%s)", settings.name, schedule_id())
     target = common.download_dir()
 
     logger.info("[2/6] 브라우저")
