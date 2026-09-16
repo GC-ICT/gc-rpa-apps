@@ -27,7 +27,7 @@ def delivered(monkeypatch: pytest.MonkeyPatch) -> list[list[Any]]:
 
 
 def test_defaults() -> None:
-    assert hub.method() == "SendMessage"
+    assert hub.method() == "SendMessageToGroup"
     assert hub.group() == "test_group"
     assert hub.system() == "test_system"
     assert hub.timeout() == 30.0
@@ -40,7 +40,7 @@ def test_hub_url_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
         hub.hub_url()
 
 
-def test_send_passes_four_strings(delivered: list[list[Any]]) -> None:
+def test_send_passes_group_system_level_message(delivered: list[list[Any]]) -> None:
     hub.send("INFO", "본문")
 
     assert delivered == [["test_group", "test_system", "INFO", "본문"]]
