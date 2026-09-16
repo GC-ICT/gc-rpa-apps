@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from gc_rpa_core import MissingConfigError, load_env, optional_env, require_env
+from gc_rpa_core import MissingConfigError, env, load_env, optional_env, require_env
 from gc_rpa_core.env import bundle_dir
 
 
@@ -35,18 +35,18 @@ def test_optional_env_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_load_env_reads_file_from_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / ".env").write_text("GC_RPA_PROBE = 'from-file'\n")
+    (tmp_path / env.ENV_FILENAME).write_text("GC_RPA_PROBE = 'from-file'\n")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("GC_RPA_PROBE", raising=False)
 
-    assert load_env() == tmp_path / ".env"
+    assert load_env() == tmp_path / env.ENV_FILENAME
     assert require_env("GC_RPA_PROBE") == "from-file"
 
 
 def test_require_env_falls_back_to_env_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / ".env").write_text("GC_RPA_PROBE=lazy\n")
+    (tmp_path / env.ENV_FILENAME).write_text("GC_RPA_PROBE=lazy\n")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("GC_RPA_PROBE", raising=False)
 
@@ -56,7 +56,7 @@ def test_require_env_falls_back_to_env_file(
 def test_real_environment_wins_over_env_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / ".env").write_text("GC_RPA_PROBE=from-file\n")
+    (tmp_path / env.ENV_FILENAME).write_text("GC_RPA_PROBE=from-file\n")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("GC_RPA_PROBE", "from-shell")
 
