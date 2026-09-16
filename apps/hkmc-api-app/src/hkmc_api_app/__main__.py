@@ -64,15 +64,26 @@ def banner(text: str) -> None:
 
 def collect(api: Api, company: str, settings: config.RpaConfig) -> int:
     with session(company) as opened:
-        result = api.fetch(opened)
+        if registry.sweeps(api):
+            results = api.sweep(opened, plants=registry.plants_for(api, company))
+        else:
+            results = {"": api.fetch(opened)}
 
-    if not succeeded(result):
-        logger.info("      %s %-28s 건너뜀 (%s)", api.index, api.name, message(result)[:32])
+    answered = [result for result in results.values() if succeeded(result)]
+    if not answered:
+        first = next(iter(results.values()))
+        logger.info("      %s %-28s 건너뜀 (%s)", api.index, api.name, message(first)[:32])
         return 0
 
-    counts = loader.load(api, result, company=company, endpoint=settings.source)
+    counts = loader.load_rows(
+        api,
+        api.collect_all(results),
+        company=company,
+        endpoint=settings.source,
+    )
     total = sum(counts.values())
-    logger.info("      %s %-28s %d행 (응답 %d건)", api.index, api.name, total, record_count(result))
+    received = sum(record_count(result) for result in answered)
+    logger.info("      %s %-28s %d행 (응답 %d건)", api.index, api.name, total, received)
     return total
 
 

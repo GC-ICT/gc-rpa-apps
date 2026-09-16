@@ -119,3 +119,23 @@ def test_main_returns_one_when_schedule_is_missing(monkeypatch: pytest.MonkeyPat
 
     assert entry.main() == 1
     assert "설정이 없습니다" in str(sent["failed"])
+
+
+def test_only_005_and_007_sweep_plants() -> None:
+    from hkmc_api_app import registry
+
+    assert [api.index for api in registry.APIS if registry.sweeps(api)] == ["005", "007"]
+
+
+def test_005_sweeps_only_inventory_plants() -> None:
+    from hkmc_api_app import api_005_supplier_inventory as api_005
+    from hkmc_api_app import registry
+
+    assert registry.plants_for(api_005.API, "HMC") == api_005.INVENTORY_PLANTS["HMC"]
+    assert registry.plants_for(api_005.API, "KIA") == api_005.INVENTORY_PLANTS["KIA"]
+
+
+def test_007_sweeps_every_plant_of_the_company() -> None:
+    from hkmc_api_app import common, registry
+
+    assert registry.plants_for(registry.BY_INDEX["007"], "KIA") == tuple(common.PLANTS["KIA"])
