@@ -218,13 +218,13 @@ def test_run_sends_token_to_company_path(api: common.Api, capture_session: dict[
 
 @pytest.mark.parametrize("api", [registry.BY_INDEX[i] for i in sorted(DATE_FIXED)], ids=ids)
 def test_fixed_date_rejects_override(api: common.Api, capture_session: dict[str, str]) -> None:
-    with pytest.raises(ValueError, match="날짜를 지정할 수 없다"):
+    with pytest.raises(ValueError, match="날짜를 지정할 수 없습니다"):
         api.run(date=DATE)
 
 
 @pytest.mark.parametrize("api", [a for a in registry.APIS if a.base_date is None], ids=ids)
 def test_dateless_rejects_date(api: common.Api) -> None:
-    with pytest.raises(ValueError, match="날짜를 쓰지 않는다"):
+    with pytest.raises(ValueError, match="날짜를 쓰지 않습니다"):
         api.check_date(DATE)
 
 
@@ -403,7 +403,7 @@ def test_fetch_rejects_unsupported_company(patch_build_client: Callable[[Handler
 
     patch_build_client(handler)
 
-    with common.session("HMC") as opened, pytest.raises(ValueError, match="인터페이스가 없다"):
+    with common.session("HMC") as opened, pytest.raises(ValueError, match="인터페이스가 없습니다"):
         registry.BY_INDEX["007"].fetch(opened)
 
 
@@ -469,5 +469,5 @@ def test_sweep_defaults_to_every_plant_of_the_company(
 
 
 def test_run_rejects_unsupported_company_before_issuing_token() -> None:
-    with pytest.raises(ValueError, match="인터페이스가 없다"):
+    with pytest.raises(ValueError, match="인터페이스가 없습니다"):
         api_007.API.run(company="HMC")

@@ -42,7 +42,7 @@ def test_wait_download_returns_the_new_file(downloads: Path) -> None:
 def test_wait_download_times_out_when_nothing_arrives(downloads: Path) -> None:
     before = browser.settled_files(downloads)
 
-    with pytest.raises(browser.DownloadError, match="새 파일이 내려오지 않았다"):
+    with pytest.raises(browser.DownloadError, match="새 파일이 내려오지 않았습니다"):
         browser.wait_download(downloads, before=before, timeout=1)
 
 

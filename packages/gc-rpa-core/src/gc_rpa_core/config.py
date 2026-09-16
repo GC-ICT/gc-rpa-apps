@@ -39,7 +39,7 @@ def load(schedule_id: str) -> RpaConfig:
         row = opened.fetchone()
 
     if row is None:
-        raise LookupError(f"{PROCEDURE} 에 schedule_id={schedule_id!r} 설정이 없다")
+        raise LookupError(f"{PROCEDURE} 에 schedule_id={schedule_id!r} 설정이 없습니다")
 
     return RpaConfig(
         name=text(row, "actprg_nm"),

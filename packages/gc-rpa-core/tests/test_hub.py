@@ -46,10 +46,29 @@ def test_send_passes_four_strings(delivered: list[list[Any]]) -> None:
     assert delivered == [["test_group", "test_system", "INFO", "본문"]]
 
 
-def test_report_success_uses_info(delivered: list[list[Any]]) -> None:
-    hub.report(success=True, message="PU010 완료")
+def test_started_sends_info(delivered: list[list[Any]]) -> None:
+    hub.started()
 
-    assert delivered[0] == ["test_group", "test_system", "INFO", "PU010 완료"]
+    assert delivered[0] == ["test_group", "test_system", "INFO", "시작합니다"]
+
+
+def test_finished_prefixes_message(delivered: list[list[Any]]) -> None:
+    hub.finished(message="a.xlsx → D:/x")
+
+    assert delivered[0] == ["test_group", "test_system", "INFO", "완료했습니다: a.xlsx → D:/x"]
+
+
+def test_failed_sends_error(delivered: list[list[Any]]) -> None:
+    hub.failed(message="LoginError: 요소 없음")
+
+    assert delivered[0] == ["test_group", "test_system", "ERROR", "LoginError: 요소 없음"]
+
+
+def test_report_success_uses_finished(delivered: list[list[Any]]) -> None:
+    hub.report(success=True, message="a.xlsx")
+
+    assert delivered[0][2] == "INFO"
+    assert delivered[0][3].startswith("완료했습니다: ")
 
 
 def test_report_failure_uses_error(delivered: list[list[Any]]) -> None:
@@ -58,10 +77,10 @@ def test_report_failure_uses_error(delivered: list[list[Any]]) -> None:
     assert delivered[0] == ["test_group", "test_system", "ERROR", "LoginError: 요소 없음"]
 
 
-def test_name_overrides_system(delivered: list[list[Any]]) -> None:
-    hub.report(success=True, message="완료", name="mobisAS2")
+def test_name_overrides_system_on_started(delivered: list[list[Any]]) -> None:
+    hub.started(name="Mobis AS RPA")
 
-    assert delivered[0][1] == "mobisAS2"
+    assert delivered[0][1] == "Mobis AS RPA"
 
 
 def test_method_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:

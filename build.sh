@@ -44,7 +44,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
         git pull --ff-only
     fi
 else
-    echo "  git 저장소가 아니라 건너뜁니다."
+    echo "  git 저장소가 아니므로 건너뜁니다."
 fi
 
 echo

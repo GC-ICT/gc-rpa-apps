@@ -116,7 +116,7 @@ class InterfaceError(RuntimeError):
 def require_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
-        raise MissingConfigError(f"환경변수 {name} 가 설정되지 않았다")
+        raise MissingConfigError(f"환경변수 {name} 가 설정되지 않았습니다")
     return value
 
 
@@ -140,7 +140,7 @@ def parse_date(value: str) -> str:
     try:
         datetime.strptime(value, "%Y%m%d")
     except ValueError as exc:
-        raise ValueError(f"날짜는 YYYYMMDD 형식이어야 한다: {value!r}") from exc
+        raise ValueError(f"날짜는 YYYYMMDD 형식이어야 합니다: {value!r}") from exc
     return value
 
 
@@ -273,15 +273,15 @@ class Api:
 
     def check_company(self, company: str) -> None:
         if not self.supports(company):
-            raise ValueError(f"{self.index} {self.name} 는 {company} 에 인터페이스가 없다")
+            raise ValueError(f"{self.index} {self.name} 는 {company} 에 인터페이스가 없습니다")
 
     def check_date(self, date: str | None) -> None:
         if date is None:
             return
         if self.base_date is None:
-            raise ValueError(f"{self.index} {self.name} 는 날짜를 쓰지 않는다")
+            raise ValueError(f"{self.index} {self.name} 는 날짜를 쓰지 않습니다")
         if self.date_fixed:
-            raise ValueError(f"{self.index} {self.name} 는 날짜를 지정할 수 없다")
+            raise ValueError(f"{self.index} {self.name} 는 날짜를 지정할 수 없습니다")
 
     def resolve_date(self, date: str | None) -> str | None:
         if date is not None:

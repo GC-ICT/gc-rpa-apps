@@ -83,7 +83,7 @@ def chrome(url: str, *, download_dir: Path, headless: bool = False) -> Iterator[
     driver = webdriver.Chrome(options=options)
     elapsed = time.monotonic() - started
     if elapsed >= SLOW_START_SECONDS:
-        logger.info("      드라이버 준비 완료 (%.1f초)", elapsed)
+        logger.info("      드라이버 준비를 마쳤습니다 (%.1f초)", elapsed)
 
     driver.set_page_load_timeout(PAGE_TIMEOUT)
     driver.set_script_timeout(PAGE_TIMEOUT)
@@ -142,7 +142,7 @@ def wait_download(directory: Path, *, before: set[Path], timeout: float = DOWNLO
             return max(added, key=lambda path: path.stat().st_mtime)
         time.sleep(0.5)
 
-    raise DownloadError(f"{timeout}초 안에 새 파일이 내려오지 않았다: {directory}")
+    raise DownloadError(f"{timeout}초 안에 새 파일이 내려오지 않았습니다: {directory}")
 
 
 def move_to(path: Path, destination: str) -> Path:

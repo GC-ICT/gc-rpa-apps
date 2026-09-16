@@ -232,12 +232,12 @@ def test_resolve_date_accepts_override_when_not_fixed() -> None:
 
 
 def test_check_date_rejects_override_when_fixed() -> None:
-    with pytest.raises(ValueError, match="날짜를 지정할 수 없다"):
+    with pytest.raises(ValueError, match="날짜를 지정할 수 없습니다"):
         _api(date_fixed=True).check_date("20260914")
 
 
 def test_check_date_rejects_date_on_dateless_api() -> None:
-    with pytest.raises(ValueError, match="날짜를 쓰지 않는다"):
+    with pytest.raises(ValueError, match="날짜를 쓰지 않습니다"):
         _api(base_date=None).check_date("20260914")
 
 

@@ -20,6 +20,9 @@ DEFAULT_TIMEOUT = 30.0
 INFO_LEVEL = "INFO"
 ERROR_LEVEL = "ERROR"
 
+STARTED = "시작합니다"
+FINISHED = "완료했습니다"
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,7 +64,7 @@ async def deliver(arguments: list[Any], *, seconds: float) -> None:
         await asyncio.wait_for(opened.wait(), seconds)
         await client.send(method(), arguments)
     except TimeoutError as exc:
-        raise HubError(f"{seconds}초 안에 허브에 연결하지 못했다: {hub_url()}") from exc
+        raise HubError(f"{seconds}초 안에 허브에 연결하지 못했습니다: {hub_url()}") from exc
     finally:
         runner.cancel()
         await asyncio.gather(runner, return_exceptions=True)
@@ -69,9 +72,24 @@ async def deliver(arguments: list[Any], *, seconds: float) -> None:
 
 def send(level: str, message: str, *, name: str = "") -> None:
     arguments = [group(), name or system(), level, message]
-    logger.debug("허브 전송 %s%r", method(), tuple(arguments))
+    logger.debug("허브로 보냅니다 %s%r", method(), tuple(arguments))
     asyncio.run(deliver(arguments, seconds=timeout()))
 
 
+def started(*, name: str = "") -> None:
+    send(INFO_LEVEL, STARTED, name=name)
+
+
+def finished(*, message: str, name: str = "") -> None:
+    send(INFO_LEVEL, f"{FINISHED}: {message}", name=name)
+
+
+def failed(*, message: str, name: str = "") -> None:
+    send(ERROR_LEVEL, message, name=name)
+
+
 def report(*, success: bool, message: str, name: str = "") -> None:
-    send(INFO_LEVEL if success else ERROR_LEVEL, message, name=name)
+    if success:
+        finished(message=message, name=name)
+    else:
+        failed(message=message, name=name)

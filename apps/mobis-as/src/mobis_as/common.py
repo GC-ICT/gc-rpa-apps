@@ -39,6 +39,6 @@ def login(driver: WebDriver, config: RpaConfig) -> None:
             fill(driver, By.ID, OTP_INPUT, config.otp)
         click(driver, By.ID, LOGIN_BUTTON)
     except TimeoutException as exc:
-        raise LoginError("로그인 화면 요소를 찾지 못했다") from exc
+        raise LoginError("로그인 화면 요소를 찾지 못했습니다") from exc
 
     accept_alert(driver)

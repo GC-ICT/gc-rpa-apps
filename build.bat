@@ -49,7 +49,7 @@ echo.
 echo [1/4] 최신 코드 받기
 git rev-parse --git-dir >nul 2>nul
 if errorlevel 1 (
-    echo   git 저장소가 아니라 건너뜁니다.
+    echo   git 저장소가 아니므로 건너뜁니다.
 ) else (
     for /f "delims=" %%S in ('git status --porcelain') do set "dirty=1"
     if defined dirty (

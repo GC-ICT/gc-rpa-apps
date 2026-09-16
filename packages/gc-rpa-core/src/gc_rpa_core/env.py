@@ -54,7 +54,7 @@ def require_env(name: str) -> str:
         load_env()
         value = os.getenv(name)
     if not value:
-        raise MissingConfigError(f"환경변수 {name} 가 설정되지 않았다")
+        raise MissingConfigError(f"환경변수 {name} 가 설정되지 않았습니다")
     return value
 
 

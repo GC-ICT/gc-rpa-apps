@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 import time
+from collections.abc import Callable
 
 from gc_rpa_core import hub
 from gc_rpa_core.env import optional_env
@@ -21,11 +22,21 @@ def headless() -> bool:
     return optional_env(HEADLESS_ENV, "1").strip().upper() in ("Y", "1", "T", "TRUE")
 
 
-def report(*, success: bool, message: str, name: str = "") -> None:
+def notify(action: Callable[..., None], **kwargs: str) -> None:
     try:
-        hub.report(success=success, message=message, name=name or FALLBACK_SYSTEM)
+        action(**kwargs)
     except Exception as exc:
-        logger.warning("허브 보고 실패: %s: %s", type(exc).__name__, exc)
+        logger.warning("허브에 보고하지 못했습니다: %s: %s", type(exc).__name__, exc)
+
+
+EMPTY_DETAILS = ("", "Message:", "Message: None", "None")
+
+
+def describe(exc: Exception) -> str:
+    detail = str(exc).strip().splitlines()[0].strip() if str(exc).strip() else ""
+    if detail in EMPTY_DETAILS:
+        detail = "상세 메시지가 없습니다"
+    return f"{type(exc).__name__}: {detail}"
 
 
 def banner(text: str) -> None:
@@ -52,16 +63,17 @@ def main() -> int:
     try:
         name = pu010.load().name or FALLBACK_SYSTEM
         banner(f"{name} — {pu010.SCREEN_CODE}")
+        notify(hub.started, name=name)
         path = pu010.run(headless=headless())
     except Exception as exc:
-        logger.error("실패: %s: %s", type(exc).__name__, exc)
-        logger.debug("상세", exc_info=True)
-        report(success=False, message=f"{type(exc).__name__}: {exc}", name=name)
-        banner(f"실패  ({time.monotonic() - started:.1f}초)")
+        logger.error("실패했습니다: %s", describe(exc))
+        logger.debug("상세 내역", exc_info=True)
+        notify(hub.failed, message=describe(exc), name=name)
+        banner(f"실패했습니다  ({time.monotonic() - started:.1f}초)")
         return 1
 
-    report(success=True, message=f"{path.name} → {path.parent}", name=name)
-    banner(f"완료  {path.name}  ({time.monotonic() - started:.1f}초)")
+    notify(hub.finished, message=f"{path.name} → {path.parent}", name=name)
+    banner(f"완료했습니다  {path.name}  ({time.monotonic() - started:.1f}초)")
     print(f"  저장 위치: {path.parent}", flush=True)
     return 0
 

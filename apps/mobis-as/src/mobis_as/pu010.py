@@ -55,7 +55,7 @@ def run(*, headless: bool = False) -> Path:
         click(driver, By.XPATH, SEARCH_BUTTON)
         click(driver, By.XPATH, EXCEL_BUTTON)
         downloaded = wait_download(target, before=before)
-        logger.info("      받음: %s (%s)", downloaded.name, size_text(downloaded))
+        logger.info("      받았습니다: %s (%s)", downloaded.name, size_text(downloaded))
 
     moved = move_to(downloaded, settings.move_path)
     logger.info("[6/6] 파일 이동   %s", moved.parent)
