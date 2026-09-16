@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from gc_rpa_core.config import RpaConfig
+from gc_rpa_core.db import DbEndpoint
 from mobis_as import pu010
 
 
@@ -32,6 +33,10 @@ def _reporter(sent: dict[str, object]) -> Any:
     return fake
 
 
+def _endpoint() -> DbEndpoint:
+    return DbEndpoint(host="", port=None, database="", user="", password="")
+
+
 def _settings(name: str) -> RpaConfig:
     return RpaConfig(
         name=name,
@@ -42,6 +47,8 @@ def _settings(name: str) -> RpaConfig:
         use_otp=True,
         move_path="test_move_dir",
         exe_name="test_app.exe",
+        source=_endpoint(),
+        target=_endpoint(),
     )
 
 

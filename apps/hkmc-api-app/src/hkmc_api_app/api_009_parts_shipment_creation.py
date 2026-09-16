@@ -104,4 +104,5 @@ API = common.Api(
     document_type="ZFMMP_R_API_CREATE_LP_ASN_HQ",
     indata=indata,
     base_date=None,
+    out_keys=("ET_EXPORT1", "ET_EXPORT2"),
 )

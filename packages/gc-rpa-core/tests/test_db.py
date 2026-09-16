@@ -31,7 +31,7 @@ def test_explicit_port_env_wins(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_connect_kwargs_defaults() -> None:
-    built = db.connect_kwargs()
+    built = db.connect_kwargs(db.from_env())
 
     assert built == {
         "server": "test-host.invalid",
@@ -49,13 +49,35 @@ def test_connect_kwargs_defaults() -> None:
 def test_connect_kwargs_omits_port_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ERP_DB_SERVER_ADDRESS", "test-host.invalid")
 
-    assert "port" not in db.connect_kwargs()
+    assert "port" not in db.connect_kwargs(db.from_env())
 
 
 def test_connect_kwargs_honours_charset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ERP_DB_CHARSET", "CP949")
 
-    assert db.connect_kwargs()["charset"] == "CP949"
+    assert db.connect_kwargs(db.from_env())["charset"] == "CP949"
+
+
+def test_connect_kwargs_uses_an_explicit_endpoint() -> None:
+    endpoint = db.DbEndpoint(
+        host="test-other.invalid",
+        port=1433,
+        database="test_other_db",
+        user="test_other_user",
+        password="test_other_pw",
+    )
+
+    built = db.connect_kwargs(endpoint)
+
+    assert built["server"] == "test-other.invalid"
+    assert built["database"] == "test_other_db"
+    assert built["port"] == 1433
+
+
+def test_endpoint_is_configured_only_with_host_and_database() -> None:
+    assert db.DbEndpoint("h", None, "d", "u", "p").configured is True
+    assert db.DbEndpoint("", None, "d", "u", "p").configured is False
+    assert db.DbEndpoint("h", None, "", "u", "p").configured is False
 
 
 @pytest.mark.parametrize(
@@ -65,4 +87,4 @@ def test_connect_kwargs_requires_env(monkeypatch: pytest.MonkeyPatch, name: str)
     monkeypatch.delenv(name)
 
     with pytest.raises(MissingConfigError, match=name):
-        db.connect_kwargs()
+        db.from_env()

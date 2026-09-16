@@ -5,6 +5,7 @@ description = "HKMC API 연동 앱"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28",
+    "gc-rpa-core",
 ]
 
 [build-system]

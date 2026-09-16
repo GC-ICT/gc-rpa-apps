@@ -513,11 +513,15 @@ name = "hkmc-api-app"
 version = "0.1.0"
 source = { editable = "apps/hkmc-api-app" }
 dependencies = [
+    { name = "gc-rpa-core" },
     { name = "httpx" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "httpx", specifier = ">=0.28" }]
+requires-dist = [
+    { name = "gc-rpa-core", editable = "packages/gc-rpa-core" },
+    { name = "httpx", specifier = ">=0.28" },
+]
 
 [[package]]
 name = "httpcore"

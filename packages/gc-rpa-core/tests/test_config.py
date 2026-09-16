@@ -50,7 +50,7 @@ def fake_cursor(monkeypatch: pytest.MonkeyPatch) -> Any:
         opened = FakeCursor(row)
 
         @contextmanager
-        def fake(**_: Any) -> Any:
+        def fake(*_a: Any, **_k: Any) -> Any:
             yield opened
 
         monkeypatch.setattr(config, "cursor", fake)
@@ -105,3 +105,20 @@ def test_load_rejects_missing_row(fake_cursor: Any) -> None:
 
     with pytest.raises(LookupError, match="schedule_id='99'"):
         config.load("99")
+
+
+def test_load_reads_source_endpoint(fake_cursor: Any) -> None:
+    fake_cursor(dict(ROW))
+
+    source = config.load("1").source
+
+    assert source.host == "test-source.invalid"
+    assert source.port == 1805
+    assert source.database == "test_source_db"
+    assert source.configured is True
+
+
+def test_load_target_endpoint_is_unconfigured(fake_cursor: Any) -> None:
+    fake_cursor(dict(ROW))
+
+    assert config.load("1").target.configured is False

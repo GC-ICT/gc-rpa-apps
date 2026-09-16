@@ -411,6 +411,13 @@ def test_out_keys_are_declared_per_api() -> None:
     assert api_003.API.out_keys == ("ET_EXPORT1", "ET_EXPORT2")
     assert api_007.API.out_keys == ("ET_EXPORT_1", "ET_EXPORT_2")
     assert api_005.API.out_keys == ("OUT_LIST",)
+    assert api_009.API.out_keys == ("ET_EXPORT1", "ET_EXPORT2")
+
+
+def test_two_list_apis_are_003_007_009() -> None:
+    paired = [api.index for api in registry.APIS if len(api.out_keys) == 2]
+
+    assert paired == ["003", "007", "009"]
 
 
 def test_007_collect_all_merges_plants_and_skips_failures() -> None:
