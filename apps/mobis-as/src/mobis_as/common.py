@@ -8,7 +8,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 
 from gc_rpa_core import RpaConfig
 from gc_rpa_core.browser import accept_alert, click, fill, resolve_dir
-from gc_rpa_core.env import optional_env
+from gc_rpa_core.env import bundle_dir, optional_env
 
 DOWNLOAD_DIR_ENV = "MOBIS_AS_DOWNLOAD_DIR"
 DEFAULT_DOWNLOAD_DIR = "downloads"
@@ -25,7 +25,10 @@ class LoginError(RuntimeError):
 
 
 def download_dir() -> Path:
-    return resolve_dir(optional_env(DOWNLOAD_DIR_ENV, DEFAULT_DOWNLOAD_DIR))
+    configured = optional_env(DOWNLOAD_DIR_ENV)
+    if configured:
+        return resolve_dir(configured)
+    return resolve_dir(str(bundle_dir() / DEFAULT_DOWNLOAD_DIR))
 
 
 def login(driver: WebDriver, config: RpaConfig) -> None:

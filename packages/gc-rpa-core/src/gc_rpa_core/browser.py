@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import time
 from collections.abc import Iterator
@@ -20,6 +21,32 @@ ELEMENT_TIMEOUT = 60
 ALERT_TIMEOUT = 5
 DOWNLOAD_TIMEOUT = 300
 PARTIAL_SUFFIXES = (".crdownload", ".tmp", ".part")
+SLOW_START_SECONDS = 3.0
+
+MANAGER_LOGGER = "selenium.webdriver.common.selenium_manager"
+MANAGER_KEYWORDS = (
+    "not found in PATH",
+    "detected at",
+    "Detected browser",
+    "Required driver",
+    "Downloading",
+    "Driver path",
+    "Unable to discover",
+)
+
+logger = logging.getLogger(__name__)
+
+
+class DriverProgressFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return any(keyword in record.getMessage() for keyword in MANAGER_KEYWORDS)
+
+
+def show_driver_progress() -> None:
+    manager = logging.getLogger(MANAGER_LOGGER)
+    manager.setLevel(logging.DEBUG)
+    if not any(isinstance(f, DriverProgressFilter) for f in manager.filters):
+        manager.addFilter(DriverProgressFilter())
 
 
 class DownloadError(RuntimeError):
@@ -51,7 +78,13 @@ def chrome(url: str, *, download_dir: Path, headless: bool = False) -> Iterator[
         },
     )
 
+    show_driver_progress()
+    started = time.monotonic()
     driver = webdriver.Chrome(options=options)
+    elapsed = time.monotonic() - started
+    if elapsed >= SLOW_START_SECONDS:
+        logger.info("      드라이버 준비 완료 (%.1f초)", elapsed)
+
     driver.set_page_load_timeout(PAGE_TIMEOUT)
     driver.set_script_timeout(PAGE_TIMEOUT)
     try:

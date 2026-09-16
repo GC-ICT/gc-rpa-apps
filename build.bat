@@ -77,6 +77,8 @@ if errorlevel 1 goto failed
 
 echo.
 echo [4/4] 빌드: %target%
+if exist "apps\%target%\dist" rmdir /s /q "apps\%target%\dist"
+if exist "apps\%target%\build" rmdir /s /q "apps\%target%\build"
 pushd "apps\%target%"
 call uv run pyinstaller --clean --noconfirm build.spec
 if errorlevel 1 (

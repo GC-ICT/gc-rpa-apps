@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -72,3 +73,34 @@ def test_move_to_keeps_file_when_destination_blank(tmp_path: Path) -> None:
     downloaded.write_text("x")
 
     assert browser.move_to(downloaded, "") == downloaded
+
+
+def record(message: str) -> logging.LogRecord:
+    return logging.LogRecord("x", logging.DEBUG, "x", 1, message, None, None)
+
+
+def test_driver_progress_filter_keeps_useful_lines() -> None:
+    keep = browser.DriverProgressFilter()
+
+    assert keep.filter(record("Downloading chromedriver 150.0 from https://..."))
+    assert keep.filter(record("Detected browser: chrome 150.0.7871.186"))
+    assert keep.filter(record("chromedriver not found in PATH"))
+
+
+def test_driver_progress_filter_drops_noise() -> None:
+    keep = browser.DriverProgressFilter()
+
+    assert not keep.filter(record("Sending stats to Plausible: Props { ... }"))
+    assert not keep.filter(record("Acquiring lock: /tmp/.../sm.lock"))
+    assert not keep.filter(record("Executing process: /path/selenium-manager --debug"))
+
+
+def test_show_driver_progress_is_idempotent() -> None:
+    browser.show_driver_progress()
+    browser.show_driver_progress()
+
+    manager = logging.getLogger(browser.MANAGER_LOGGER)
+    installed = [f for f in manager.filters if isinstance(f, browser.DriverProgressFilter)]
+
+    assert len(installed) == 1
+    assert manager.level == logging.DEBUG

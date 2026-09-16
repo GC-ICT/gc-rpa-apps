@@ -59,6 +59,7 @@ uv run pytest -q
 
 echo
 echo "[4/4] 빌드: $target"
+rm -rf "apps/$target/dist" "apps/$target/build"
 (cd "apps/$target" && uv run pyinstaller --clean --noconfirm build.spec)
 
 echo
