@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from pysignalr.client import SignalRClient
@@ -50,30 +53,95 @@ def timeout() -> float:
     return float(optional_env(TIMEOUT_ENV, str(DEFAULT_TIMEOUT)))
 
 
-async def deliver(arguments: list[Any], *, seconds: float) -> None:
+class Session:
+    def __init__(
+        self, client: SignalRClient | None, loop: asyncio.AbstractEventLoop | None
+    ) -> None:
+        self.client = client
+        self.loop = loop
+
+    @property
+    def connected(self) -> bool:
+        return self.client is not None and self.loop is not None
+
+    def send(self, level: str, message: str, *, name: str = "") -> None:
+        arguments: list[Any] = [group(), name or system(), level, message]
+        if not self.connected:
+            logger.warning("허브에 연결되어 있지 않아 보내지 못했습니다: %r", tuple(arguments))
+            return
+
+        assert self.client is not None and self.loop is not None
+        logger.debug("허브로 보냅니다 %s%r", method(), tuple(arguments))
+        future = asyncio.run_coroutine_threadsafe(self.client.send(method(), arguments), self.loop)
+        future.result(timeout())
+
+    def started(self, *, name: str = "") -> None:
+        self.send(INFO_LEVEL, STARTED, name=name)
+
+    def finished(self, *, message: str, name: str = "") -> None:
+        self.send(INFO_LEVEL, f"{FINISHED}: {message}", name=name)
+
+    def failed(self, *, message: str, name: str = "") -> None:
+        self.send(ERROR_LEVEL, message, name=name)
+
+
+async def cancel_pending() -> bool:
+    pending = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+    if not pending:
+        return False
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    return True
+
+
+async def shutdown() -> None:
+    while await cancel_pending():
+        pass
+    await asyncio.get_running_loop().shutdown_asyncgens()
+    await cancel_pending()
+
+
+@contextmanager
+def session(*, seconds: float | None = None) -> Iterator[Session]:
+    limit = timeout() if seconds is None else seconds
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+
     client = SignalRClient(hub_url())
-    opened = asyncio.Event()
+    opened = threading.Event()
 
     async def mark_open() -> None:
         opened.set()
 
+    running: list[asyncio.Task[None]] = []
+
+    async def start_runner() -> None:
+        running.append(asyncio.create_task(client.run()))
+
     client.on_open(mark_open)
 
-    runner = asyncio.create_task(client.run())
     try:
-        await asyncio.wait_for(opened.wait(), seconds)
-        await client.send(method(), arguments)
-    except TimeoutError as exc:
-        raise HubError(f"{seconds}초 안에 허브에 연결하지 못했습니다: {hub_url()}") from exc
+        asyncio.run_coroutine_threadsafe(start_runner(), loop).result(limit)
+        if opened.wait(limit):
+            yield Session(client, loop)
+        else:
+            logger.warning("%s초 안에 허브에 연결하지 못했습니다: %s", limit, hub_url())
+            yield Session(None, None)
     finally:
-        runner.cancel()
-        await asyncio.gather(runner, return_exceptions=True)
+        try:
+            asyncio.run_coroutine_threadsafe(shutdown(), loop).result(limit)
+        except Exception as exc:
+            logger.debug("허브 연결 정리 중 무시한 오류: %s", exc)
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=limit)
+        loop.close()
 
 
 def send(level: str, message: str, *, name: str = "") -> None:
-    arguments = [group(), name or system(), level, message]
-    logger.debug("허브로 보냅니다 %s%r", method(), tuple(arguments))
-    asyncio.run(deliver(arguments, seconds=timeout()))
+    with session() as opened:
+        opened.send(level, message, name=name)
 
 
 def started(*, name: str = "") -> None:
@@ -86,10 +154,3 @@ def finished(*, message: str, name: str = "") -> None:
 
 def failed(*, message: str, name: str = "") -> None:
     send(ERROR_LEVEL, message, name=name)
-
-
-def report(*, success: bool, message: str, name: str = "") -> None:
-    if success:
-        finished(message=message, name=name)
-    else:
-        failed(message=message, name=name)

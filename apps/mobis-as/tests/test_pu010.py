@@ -1,9 +1,30 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from gc_rpa_core.config import RpaConfig
 from mobis_as import pu010
+
+
+def _reporter(sent: dict[str, object]) -> Any:
+    class Recorder:
+        def started(self, **kw: object) -> None:
+            sent.update(kw)
+
+        def finished(self, **kw: object) -> None:
+            sent.update(kw)
+
+        def failed(self, **kw: object) -> None:
+            sent.update(kw)
+
+    @contextmanager
+    def fake() -> Iterator[Recorder]:
+        yield Recorder()
+
+    return fake
 
 
 def _settings(name: str) -> RpaConfig:
@@ -70,8 +91,7 @@ def test_main_returns_one_and_reports_failure(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(entry.pu010, "load", lambda: _settings("테스트 RPA"))
     monkeypatch.setattr(entry.pu010, "run", fail)
-    monkeypatch.setattr(entry.hub, "started", lambda **kw: None)
-    monkeypatch.setattr(entry.hub, "failed", lambda **kw: sent.update(kw))
+    monkeypatch.setattr(entry, "reporter", _reporter(sent))
 
     assert entry.main() == 1
     assert sent["name"] == "테스트 RPA"
@@ -85,8 +105,7 @@ def test_main_falls_back_when_config_has_no_name(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(entry.pu010, "load", lambda: _settings(""))
     monkeypatch.setattr(entry.pu010, "run", lambda **_: Path("x.xlsx"))
-    monkeypatch.setattr(entry.hub, "started", lambda **kw: None)
-    monkeypatch.setattr(entry.hub, "finished", lambda **kw: sent.update(kw))
+    monkeypatch.setattr(entry, "reporter", _reporter(sent))
 
     assert entry.main() == 0
     assert sent["name"] == entry.FALLBACK_SYSTEM

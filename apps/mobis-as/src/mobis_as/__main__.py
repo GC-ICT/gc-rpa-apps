@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 
 from gc_rpa_core import hub
 from gc_rpa_core.env import optional_env
@@ -27,6 +28,16 @@ def notify(action: Callable[..., None], **kwargs: str) -> None:
         action(**kwargs)
     except Exception as exc:
         logger.warning("허브에 보고하지 못했습니다: %s: %s", type(exc).__name__, exc)
+
+
+@contextmanager
+def reporter() -> Iterator[hub.Session]:
+    try:
+        with hub.session() as opened:
+            yield opened
+    except Exception as exc:
+        logger.warning("허브 연결에 실패했습니다: %s: %s", type(exc).__name__, exc)
+        yield hub.Session(None, None)
 
 
 EMPTY_DETAILS = ("", "Message:", "Message: None", "None")
@@ -60,19 +71,21 @@ def main() -> int:
     started = time.monotonic()
     name = FALLBACK_SYSTEM
 
-    try:
-        name = pu010.load().name or FALLBACK_SYSTEM
-        banner(f"{name} — {pu010.SCREEN_CODE}")
-        notify(hub.started, name=name)
-        path = pu010.run(headless=headless())
-    except Exception as exc:
-        logger.error("실패했습니다: %s", describe(exc))
-        logger.debug("상세 내역", exc_info=True)
-        notify(hub.failed, message=describe(exc), name=name)
-        banner(f"실패했습니다  ({time.monotonic() - started:.1f}초)")
-        return 1
+    with reporter() as hub_session:
+        try:
+            name = pu010.load().name or FALLBACK_SYSTEM
+            banner(f"{name} — {pu010.SCREEN_CODE}")
+            notify(hub_session.started, name=name)
+            path = pu010.run(headless=headless())
+        except Exception as exc:
+            logger.error("실패했습니다: %s", describe(exc))
+            logger.debug("상세 내역", exc_info=True)
+            notify(hub_session.failed, message=describe(exc), name=name)
+            banner(f"실패했습니다  ({time.monotonic() - started:.1f}초)")
+            return 1
 
-    notify(hub.finished, message=f"{path.name} → {path.parent}", name=name)
+        notify(hub_session.finished, message=f"{path.name} → {path.parent}", name=name)
+
     banner(f"완료했습니다  {path.name}  ({time.monotonic() - started:.1f}초)")
     print(f"  저장 위치: {path.parent}", flush=True)
     return 0

@@ -15,15 +15,29 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SIGNALR_TIMEOUT", raising=False)
 
 
+class FakeClient:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, list[Any]]] = []
+
+    async def send(self, target: str, arguments: list[Any]) -> None:
+        self.sent.append((target, arguments))
+
+
 @pytest.fixture
-def delivered(monkeypatch: pytest.MonkeyPatch) -> list[list[Any]]:
-    captured: list[list[Any]] = []
+def connected(monkeypatch: pytest.MonkeyPatch) -> Any:
+    client = FakeClient()
 
-    async def fake(arguments: list[Any], *, seconds: float) -> None:
-        captured.append(arguments)
+    def run_threadsafe(coroutine: Any, loop: Any) -> Any:
+        import asyncio
 
-    monkeypatch.setattr(hub, "deliver", fake)
-    return captured
+        class Done:
+            def result(self, _: float) -> None:
+                asyncio.new_event_loop().run_until_complete(coroutine)
+
+        return Done()
+
+    monkeypatch.setattr(hub.asyncio, "run_coroutine_threadsafe", run_threadsafe)
+    return hub.Session(client, object()), client  # type: ignore[arg-type]
 
 
 def test_defaults() -> None:
@@ -40,47 +54,53 @@ def test_hub_url_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
         hub.hub_url()
 
 
-def test_send_passes_group_system_level_message(delivered: list[list[Any]]) -> None:
-    hub.send("INFO", "본문")
+def test_send_passes_group_system_level_message(connected: Any) -> None:
+    opened, client = connected
 
-    assert delivered == [["test_group", "test_system", "INFO", "본문"]]
+    opened.send("INFO", "본문")
 
-
-def test_started_sends_info(delivered: list[list[Any]]) -> None:
-    hub.started()
-
-    assert delivered[0] == ["test_group", "test_system", "INFO", "시작합니다"]
+    assert client.sent == [("SendMessageToGroup", ["test_group", "test_system", "INFO", "본문"])]
 
 
-def test_finished_prefixes_message(delivered: list[list[Any]]) -> None:
-    hub.finished(message="a.xlsx → D:/x")
+def test_started_sends_info(connected: Any) -> None:
+    opened, client = connected
 
-    assert delivered[0] == ["test_group", "test_system", "INFO", "완료했습니다: a.xlsx → D:/x"]
+    opened.started()
 
-
-def test_failed_sends_error(delivered: list[list[Any]]) -> None:
-    hub.failed(message="LoginError: 요소 없음")
-
-    assert delivered[0] == ["test_group", "test_system", "ERROR", "LoginError: 요소 없음"]
+    assert client.sent[0][1] == ["test_group", "test_system", "INFO", "시작합니다"]
 
 
-def test_report_success_uses_finished(delivered: list[list[Any]]) -> None:
-    hub.report(success=True, message="a.xlsx")
+def test_finished_prefixes_message(connected: Any) -> None:
+    opened, client = connected
 
-    assert delivered[0][2] == "INFO"
-    assert delivered[0][3].startswith("완료했습니다: ")
+    opened.finished(message="a.xlsx → D:/x")
 
-
-def test_report_failure_uses_error(delivered: list[list[Any]]) -> None:
-    hub.report(success=False, message="LoginError: 요소 없음")
-
-    assert delivered[0] == ["test_group", "test_system", "ERROR", "LoginError: 요소 없음"]
+    assert client.sent[0][1][3] == "완료했습니다: a.xlsx → D:/x"
 
 
-def test_name_overrides_system_on_started(delivered: list[list[Any]]) -> None:
-    hub.started(name="Mobis AS RPA")
+def test_failed_sends_error(connected: Any) -> None:
+    opened, client = connected
 
-    assert delivered[0][1] == "Mobis AS RPA"
+    opened.failed(message="LoginError: 요소를 찾지 못했습니다")
+
+    assert client.sent[0][1][2] == "ERROR"
+
+
+def test_name_overrides_system(connected: Any) -> None:
+    opened, client = connected
+
+    opened.started(name="Mobis AS RPA")
+
+    assert client.sent[0][1][1] == "Mobis AS RPA"
+
+
+def test_disconnected_session_drops_messages_without_raising() -> None:
+    opened = hub.Session(None, None)
+
+    assert opened.connected is False
+    opened.started()
+    opened.finished(message="a")
+    opened.failed(message="b")
 
 
 def test_method_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
