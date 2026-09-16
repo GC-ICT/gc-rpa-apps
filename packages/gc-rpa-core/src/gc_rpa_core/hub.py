@@ -23,8 +23,8 @@ DEFAULT_TIMEOUT = 30.0
 INFO_LEVEL = "INFO"
 ERROR_LEVEL = "ERROR"
 
-STARTED = "시작"
-FINISHED = "완료"
+STARTED = "시작합니다"
+FINISHED = "완료했습니다"
 
 logger = logging.getLogger(__name__)
 

@@ -67,7 +67,7 @@ def test_started_sends_info(connected: Any) -> None:
 
     opened.started()
 
-    assert client.sent[0][1] == ["test_group", "test_system", "INFO", "시작합니다"]
+    assert client.sent[0][1] == ["test_group", "test_system", "INFO", hub.STARTED]
 
 
 def test_finished_prefixes_message(connected: Any) -> None:
@@ -75,7 +75,7 @@ def test_finished_prefixes_message(connected: Any) -> None:
 
     opened.finished(message="a.xlsx → D:/x")
 
-    assert client.sent[0][1][3] == "완료했습니다: a.xlsx → D:/x"
+    assert client.sent[0][1][3] == f"{hub.FINISHED}: a.xlsx → D:/x"
 
 
 def test_failed_sends_error(connected: Any) -> None:
@@ -101,6 +101,11 @@ def test_disconnected_session_drops_messages_without_raising() -> None:
     opened.started()
     opened.finished(message="a")
     opened.failed(message="b")
+
+
+def test_status_messages_are_polite() -> None:
+    assert hub.STARTED.endswith("니다")
+    assert hub.FINISHED.endswith("니다")
 
 
 def test_method_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
