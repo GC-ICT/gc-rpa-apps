@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from gc_rpa_core.db import DbEndpoint, cursor
@@ -118,22 +118,22 @@ def load(
             logger.info("%s %d행 적재", table, len(rows))
 
     for ordinal in ordinals(api):
-        run_procedure(procedure(api.index, ordinal), endpoint=endpoint)
+        run_procedure(procedure(api.index, ordinal), moment.date(), endpoint=endpoint)
 
     return inserted
 
 
-def run_procedure(name: str, *, endpoint: DbEndpoint | None = None) -> bool:
-    with cursor(endpoint, autocommit=True) as opened:
-        opened.execute("SELECT OBJECT_ID(%s, 'P') AS id", (qualified(name),))
+def run_procedure(name: str, run_dt: date, *, endpoint: DbEndpoint | None = None) -> bool:
+    with cursor(endpoint, autocommit=True, as_dict=False) as opened:
+        opened.execute("SELECT OBJECT_ID(%s, 'P')", (qualified(name),))
         row = opened.fetchone()
-        if row is None or row["id"] is None:
+        if row is None or row[0] is None:
             logger.info("%s 가 없어 건너뜁니다", name)
             return False
         try:
-            opened.execute(f"EXEC {qualified(name)}")
+            opened.execute(f"EXEC {qualified(name)} @run_dt = %s", (run_dt,))
         except Exception as exc:
             raise DatabaseError(f"{name} 실행에 실패했습니다: {exc}") from exc
 
-    logger.info("%s 실행", name)
+    logger.info("%s 실행 (run_dt=%s)", name, run_dt)
     return True

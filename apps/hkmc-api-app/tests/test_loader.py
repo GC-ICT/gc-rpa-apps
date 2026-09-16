@@ -1,6 +1,6 @@
 import json
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import pytest
@@ -13,18 +13,19 @@ class FakeCursor:
         self.executed: list[tuple[str, Any]] = []
         self.many: list[tuple[str, list[Any]]] = []
         self.procedure_ids = procedure_ids or {}
-        self.last: dict[str, Any] | None = None
+        self.last: tuple[Any, ...] | None = None
 
     def execute(self, query: str, params: Any = None) -> None:
         self.executed.append((query, params))
         if "OBJECT_ID" in query:
             name = params[0]
-            self.last = {"id": self.procedure_ids.get(name)}
+            found = self.procedure_ids.get(name)
+            self.last = None if found is None else (found,)
 
     def executemany(self, query: str, rows: list[Any]) -> None:
         self.many.append((query, rows))
 
-    def fetchone(self) -> dict[str, Any] | None:
+    def fetchone(self) -> tuple[Any, ...] | None:
         return self.last
 
 
@@ -180,15 +181,28 @@ def test_load_skips_insert_for_empty_list(fake_cursor: Any) -> None:
 def test_run_procedure_skips_when_missing(fake_cursor: Any) -> None:
     opened = fake_cursor({})
 
-    assert loader.run_procedure("Z_API_002_PROC") is False
+    assert loader.run_procedure("Z_API_002_PROC", date(2026, 9, 16)) is False
     assert not any("EXEC" in query for query, _ in opened.executed)
 
 
-def test_run_procedure_executes_when_present(fake_cursor: Any) -> None:
+def test_run_procedure_passes_run_dt(fake_cursor: Any) -> None:
     opened = fake_cursor({"[IT_Info].[dbo].[Z_API_002_PROC]": 999})
 
-    assert loader.run_procedure("Z_API_002_PROC") is True
-    assert any("EXEC" in query for query, _ in opened.executed)
+    assert loader.run_procedure("Z_API_002_PROC", date(2026, 9, 16)) is True
+
+    executed = [(query, params) for query, params in opened.executed if "EXEC" in query]
+    assert "@run_dt = %s" in executed[0][0]
+    assert executed[0][1] == (date(2026, 9, 16),)
+
+
+def test_load_passes_collection_date_to_procedure(fake_cursor: Any) -> None:
+    opened = fake_cursor({"[IT_Info].[dbo].[Z_API_001_PROC]": 1})
+
+    loader.load(registry.BY_INDEX["001"], envelope({"OUT_LIST": [{"A": "1"}]}), company="HMC")
+
+    executed = [(query, params) for query, params in opened.executed if "EXEC" in query]
+    inserted_at = opened.many[0][1][0][0]
+    assert executed[0][1] == (inserted_at.date(),)
 
 
 def test_failed_response_stops_before_insert(fake_cursor: Any) -> None:
