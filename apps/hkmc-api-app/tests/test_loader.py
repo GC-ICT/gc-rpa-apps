@@ -92,7 +92,7 @@ def test_unwrap_returns_empty_list_for_missing_key() -> None:
 def test_unwrap_rejects_failed_response() -> None:
     api = registry.BY_INDEX["001"]
 
-    with pytest.raises(loader.GerpError, match="응답이 실패했습니다"):
+    with pytest.raises(loader.ResponseError, match="응답이 실패했습니다"):
         loader.unwrap(api, envelope({}, result="E"))
 
 
@@ -100,7 +100,7 @@ def test_unwrap_labels_broken_envelope() -> None:
     api = registry.BY_INDEX["001"]
     broken = {"outData": {"E_IFRESULT": "Z", "OUTDATA_JSON": "{not json"}}
 
-    with pytest.raises(loader.GerpError, match="응답 봉투"):
+    with pytest.raises(loader.ResponseError, match="응답 본문"):
         loader.unwrap(api, broken)
 
 
@@ -208,7 +208,7 @@ def test_load_passes_collection_date_to_procedure(fake_cursor: Any) -> None:
 def test_failed_response_stops_before_insert(fake_cursor: Any) -> None:
     opened = fake_cursor()
 
-    with pytest.raises(loader.GerpError):
+    with pytest.raises(loader.ResponseError):
         loader.load(registry.BY_INDEX["001"], envelope({}, result="E"), company="HMC")
 
     assert opened.many == []

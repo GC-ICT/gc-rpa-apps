@@ -18,7 +18,7 @@ SPMON_INDEXES = ("014", "015")
 logger = logging.getLogger(__name__)
 
 
-class GerpError(RuntimeError):
+class ResponseError(RuntimeError):
     pass
 
 
@@ -51,12 +51,12 @@ def collected_at() -> datetime:
 def unwrap(api: Api, result: Any) -> dict[str, list[dict[str, Any]]]:
     try:
         if not succeeded(result):
-            raise GerpError(f"응답이 실패했습니다: {result['outData']['E_IFMSG']}")
+            raise ResponseError(f"응답이 실패했습니다: {result['outData']['E_IFMSG']}")
         parsed = outdata(result)
-    except GerpError:
+    except ResponseError:
         raise
     except Exception as exc:
-        raise GerpError(f"응답 봉투를 해석하지 못했습니다: {exc}") from exc
+        raise ResponseError(f"응답 본문을 해석하지 못했습니다: {exc}") from exc
 
     return {key: parsed.get(key) or [] for key in api.out_keys}
 
@@ -98,7 +98,17 @@ def load(
     spmon: str = "",
     endpoint: DbEndpoint | None = None,
 ) -> dict[str, int]:
-    lists = unwrap(api, result)
+    return load_rows(api, unwrap(api, result), company=company, spmon=spmon, endpoint=endpoint)
+
+
+def load_rows(
+    api: Api,
+    lists: dict[str, list[dict[str, Any]]],
+    *,
+    company: str,
+    spmon: str = "",
+    endpoint: DbEndpoint | None = None,
+) -> dict[str, int]:
     moment = collected_at()
     month = spmon if uses_spmon(api) else ""
     inserted: dict[str, int] = {}
@@ -113,9 +123,9 @@ def load(
             try:
                 opened.executemany(insert_statement(table, spmon=bool(month)), rows)
             except Exception as exc:
-                raise DatabaseError(f"{table} 적재에 실패했습니다: {exc}") from exc
+                raise DatabaseError(f"{table} 데이터 쓰기에 실패했습니다: {exc}") from exc
             inserted[table] = len(rows)
-            logger.info("%s %d행 적재", table, len(rows))
+            logger.info("      %s %d행 데이터 쓰기", table, len(rows))
 
     for ordinal in ordinals(api):
         run_procedure(procedure(api.index, ordinal), moment.date(), endpoint=endpoint)
@@ -128,12 +138,12 @@ def run_procedure(name: str, run_dt: date, *, endpoint: DbEndpoint | None = None
         opened.execute("SELECT OBJECT_ID(%s, 'P')", (qualified(name),))
         row = opened.fetchone()
         if row is None or row[0] is None:
-            logger.info("%s 가 없어 건너뜁니다", name)
+            logger.info("      %s 가 없어 건너뜁니다", name)
             return False
         try:
             opened.execute(f"EXEC {qualified(name)} @run_dt = %s", (run_dt,))
         except Exception as exc:
             raise DatabaseError(f"{name} 실행에 실패했습니다: {exc}") from exc
 
-    logger.info("%s 실행 (run_dt=%s)", name, run_dt)
+    logger.info("      %s 실행", name)
     return True

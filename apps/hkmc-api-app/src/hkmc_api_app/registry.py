@@ -16,6 +16,7 @@ from hkmc_api_app import api_013_inspection_success_notification as api_013
 from hkmc_api_app import api_014_monthly_inspection_info as api_014
 from hkmc_api_app import api_015_paid_supplied_sales_status as api_015
 from hkmc_api_app import api_016_jeonju_kanban_order_info as api_016
+from hkmc_api_app import common
 from hkmc_api_app.common import Api
 
 APIS: tuple[Api, ...] = (
@@ -44,3 +45,17 @@ READABLE = tuple(api for api in APIS if not api.writes)
 
 def for_company(company: str) -> tuple[Api, ...]:
     return tuple(api for api in READABLE if api.supports(company))
+
+
+SWEEP_PLANTS = {
+    "005": lambda company: api_005.INVENTORY_PLANTS[company],
+    "007": lambda company: tuple(common.PLANTS[company]),
+}
+
+
+def sweeps(api: Api) -> bool:
+    return api.index in SWEEP_PLANTS
+
+
+def plants_for(api: Api, company: str) -> tuple[str, ...]:
+    return tuple(SWEEP_PLANTS[api.index](company))
