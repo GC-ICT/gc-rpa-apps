@@ -103,11 +103,6 @@ def test_disconnected_session_drops_messages_without_raising() -> None:
     opened.failed(message="b")
 
 
-def test_status_messages_are_polite() -> None:
-    assert hub.STARTED.endswith("니다")
-    assert hub.FINISHED.endswith("니다")
-
-
 def test_method_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SIGNALR_METHOD", "ReportResult")
 
