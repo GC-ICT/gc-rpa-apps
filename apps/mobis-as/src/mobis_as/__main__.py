@@ -71,12 +71,14 @@ def main() -> int:
     started = time.monotonic()
     name = FALLBACK_SYSTEM
 
-    with reporter() as hub_session:
+    with reporter() as hub_session, hub.forwarding(hub_session, pu010.logger) as relay:
         try:
-            name = pu010.load().name or FALLBACK_SYSTEM
+            settings = pu010.load()
+            name = settings.name or FALLBACK_SYSTEM
+            relay.system_name = name
             banner(f"{name} — {pu010.SCREEN_CODE}")
             notify(hub_session.started, name=name)
-            path = pu010.run(headless=headless())
+            path = pu010.run(settings, headless=headless())
         except Exception as exc:
             logger.error("실패했습니다: %s", describe(exc))
             logger.debug("상세 내역", exc_info=True)

@@ -34,8 +34,8 @@ def load() -> config.RpaConfig:
     return config.load(schedule_id())
 
 
-def run(*, headless: bool = False) -> Path:
-    settings = load()
+def run(settings: config.RpaConfig | None = None, *, headless: bool = False) -> Path:
+    settings = settings or load()
     logger.info("[1/6] 설정 조회   %s (schedule_id=%s)", settings.name, schedule_id())
     target = common.download_dir()
 

@@ -20,6 +20,11 @@ def _reporter(sent: dict[str, object]) -> Any:
         def failed(self, **kw: object) -> None:
             sent.update(kw)
 
+        connected = False
+
+        def send(self, *_: object, **__: object) -> None:
+            return None
+
     @contextmanager
     def fake() -> Iterator[Recorder]:
         yield Recorder()
@@ -86,7 +91,7 @@ def test_main_returns_one_and_reports_failure(monkeypatch: pytest.MonkeyPatch) -
 
     sent: dict[str, object] = {}
 
-    def fail(**_: object) -> None:
+    def fail(*_a: object, **_k: object) -> None:
         raise ValueError("다운로드 실패")
 
     monkeypatch.setattr(entry.pu010, "load", lambda: _settings("테스트 RPA"))
@@ -104,7 +109,7 @@ def test_main_falls_back_when_config_has_no_name(monkeypatch: pytest.MonkeyPatch
     sent: dict[str, object] = {}
 
     monkeypatch.setattr(entry.pu010, "load", lambda: _settings(""))
-    monkeypatch.setattr(entry.pu010, "run", lambda **_: Path("x.xlsx"))
+    monkeypatch.setattr(entry.pu010, "run", lambda *_a, **_k: Path("x.xlsx"))
     monkeypatch.setattr(entry, "reporter", _reporter(sent))
 
     assert entry.main() == 0

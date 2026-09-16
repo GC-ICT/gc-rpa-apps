@@ -23,8 +23,8 @@ DEFAULT_TIMEOUT = 30.0
 INFO_LEVEL = "INFO"
 ERROR_LEVEL = "ERROR"
 
-STARTED = "시작합니다"
-FINISHED = "완료했습니다"
+STARTED = "시작"
+FINISHED = "완료"
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,34 @@ class Session:
 
     def failed(self, *, message: str, name: str = "") -> None:
         self.send(ERROR_LEVEL, message, name=name)
+
+
+class HubHandler(logging.Handler):
+    def __init__(self, session: Session, *, name: str = "") -> None:
+        super().__init__()
+        self.session = session
+        self.system_name = name
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if not self.session.connected:
+            return
+        level = ERROR_LEVEL if record.levelno >= logging.ERROR else INFO_LEVEL
+        try:
+            self.session.send(level, record.getMessage(), name=self.system_name)
+        except Exception:
+            self.handleError(record)
+
+
+@contextmanager
+def forwarding(session: Session, *loggers: logging.Logger, name: str = "") -> Iterator[HubHandler]:
+    handler = HubHandler(session, name=name)
+    for target in loggers:
+        target.addHandler(handler)
+    try:
+        yield handler
+    finally:
+        for target in loggers:
+            target.removeHandler(handler)
 
 
 async def cancel_pending() -> bool:
