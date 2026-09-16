@@ -29,6 +29,7 @@ class RpaConfig:
     otp: str
     use_otp: bool
     move_path: str
+    exe_name: str
 
 
 def load(schedule_id: str) -> RpaConfig:
@@ -46,4 +47,5 @@ def load(schedule_id: str) -> RpaConfig:
         otp=text(row, "rpa_opt"),
         use_otp=flag(text(row, "opt_yn")),
         move_path=text(row, "file_move_path"),
+        exe_name=text(row, "file_nm"),
     )

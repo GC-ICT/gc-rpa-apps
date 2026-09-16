@@ -4,6 +4,8 @@ from PyInstaller.utils.hooks import collect_all
 
 datas, binaries, hiddenimports = [], [], []
 
+FALLBACK_NAME = "mobisAS"
+
 env_file = Path(SPECPATH) / ".env"
 if env_file.is_file():
     datas += [(str(env_file), ".")]
@@ -16,6 +18,29 @@ for package in ("selenium", "pymssql", "pysignalr", "dotenv"):
     datas += package_datas
     binaries += package_binaries
     hiddenimports += package_hidden
+
+def executable_name():
+    import os
+    import sys
+
+    sys.path.insert(0, str(Path(SPECPATH).parents[1] / "packages" / "gc-rpa-core" / "src"))
+    os.chdir(SPECPATH)
+    try:
+        from gc_rpa_core import config
+        from gc_rpa_core.env import optional_env
+
+        settings = config.load(optional_env("MOBIS_AS_SCHEDULE_ID", "1"))
+        name = Path(settings.exe_name).stem
+        if not name:
+            raise ValueError("file_nm 이 비어 있다")
+    except Exception as exc:
+        print(f"[build.spec] 프로시저에서 이름을 읽지 못해 {FALLBACK_NAME} 로 빌드합니다: {exc}")
+        return FALLBACK_NAME
+    print(f"[build.spec] 실행파일 이름을 프로시저에서 읽었습니다: {name}")
+    return name
+
+
+app_name = executable_name()
 
 a = Analysis(
     ["src/mobis_as/__main__.py"],
@@ -32,7 +57,7 @@ exe = EXE(
     a.scripts,
     a.binaries,
     a.datas,
-    name="mobisAS",
+    name=app_name,
     console=True,
     upx=False,
 )

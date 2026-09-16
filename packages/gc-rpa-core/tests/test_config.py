@@ -89,12 +89,13 @@ def test_opt_yn_falsy_values(fake_cursor: Any, value: str | None) -> None:
 
 
 def test_load_tolerates_null_columns(fake_cursor: Any) -> None:
-    fake_cursor({**ROW, "file_move_path": None, "rpa_opt": None})
+    fake_cursor({**ROW, "file_move_path": None, "rpa_opt": None, "file_nm": None})
 
     settings = config.load("1")
 
     assert settings.move_path == ""
     assert settings.otp == ""
+    assert settings.exe_name == ""
 
 
 def test_load_rejects_missing_row(fake_cursor: Any) -> None:
