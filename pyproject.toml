@@ -1,5 +1,8 @@
 [tool.uv.workspace]
-members = ["apps/*"]
+members = ["apps/*", "packages/*"]
+
+[tool.uv.sources]
+gc-rpa-core = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -7,12 +10,13 @@ dev = [
     "pytest-cov>=6.0",
     "ruff>=0.9",
     "mypy>=1.14",
+    "pyinstaller>=6.11",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["apps/*/src"]
+src = ["apps/*/src", "packages/*/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
@@ -24,8 +28,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
-files = ["apps/*/src"]
+files = ["apps/*/src", "packages/*/src"]
 
 [tool.pytest.ini_options]
-testpaths = ["apps"]
+testpaths = ["apps", "packages"]
 addopts = "-ra --import-mode=importlib"

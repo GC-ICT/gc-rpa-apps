@@ -7,8 +7,8 @@ import pytest
 
 from hkmc_api_app import common
 
-TOKEN = "tok-1"
-VENDOR = "V123"
+TOKEN = "test_token"
+VENDOR = "test_vendor_alt"
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -47,7 +47,7 @@ def test_issue_token_posts_client_credentials(
         assert common.issue_token(client, "HMC") == TOKEN
 
     assert captured["path"] == "/oauth/token"
-    assert captured["auth"] == "Basic aWQ6c2VjcmV0"
+    assert captured["auth"] == "Basic dGVzdF9pZDp0ZXN0X3NlY3JldA=="
     assert captured["content_type"] == "application/x-www-form-urlencoded"
     assert captured["body"] == "grant_type=client_credentials"
 
@@ -81,9 +81,9 @@ def test_issue_token_requires_credentials(
 
 
 def test_service_code_derives_from_ifid() -> None:
-    assert common.service_code("HMC", "D191", "MMPM8006") == "D191-MMH-B-80060"
-    assert common.service_code("KIA", "D191", "MMPM8006") == "D191-MMK-B-80060"
-    assert common.service_code("HMC", "D191", "MMPM8003") == "D191-MMH-B-80030"
+    assert common.service_code("HMC", "test_vendor", "MMPM8006") == "test_vendor-MMH-B-80060"
+    assert common.service_code("KIA", "test_vendor", "MMPM8006") == "test_vendor-MMK-B-80060"
+    assert common.service_code("HMC", "test_vendor", "MMPM8003") == "test_vendor-MMH-B-80030"
 
 
 def test_receive_path_per_company() -> None:
@@ -108,28 +108,28 @@ def test_today_and_yesterday() -> None:
 def test_envelope_key_order_and_constants() -> None:
     payload = common.envelope(
         company="HMC",
-        vendor="D191",
+        vendor="test_vendor",
         ifid="MMPM8006",
         document_type="ZFMMP_S_API_DAILY_GROSS_HQ",
-        indata={"I_LIFNR": "D191"},
+        indata={"I_LIFNR": "test_vendor"},
     )
 
     assert tuple(payload) == common.ENVELOPE_KEYS
     assert payload["RECORD_COUNT"] == "1"
     assert payload["TARGET_SYSTEM"] == "ERPMM"
-    assert payload["SERVICE_CODE"] == "D191-MMH-B-80060"
+    assert payload["SERVICE_CODE"] == "test_vendor-MMH-B-80060"
 
 
 def test_envelope_serializes_indata_without_spaces() -> None:
     payload = common.envelope(
         company="HMC",
-        vendor="D191",
+        vendor="test_vendor",
         ifid="MMPM8008",
         document_type="X",
-        indata={"I_LIFNR": "D191", "I_ERDAT": "20260914"},
+        indata={"I_LIFNR": "test_vendor", "I_ERDAT": "20260914"},
     )
 
-    assert payload["INDATA_JSON"] == '{"I_LIFNR":"D191","I_ERDAT":"20260914"}'
+    assert payload["INDATA_JSON"] == '{"I_LIFNR":"test_vendor","I_ERDAT":"20260914"}'
 
 
 def test_request_sends_acc_token_to_company_path(
@@ -143,7 +143,7 @@ def test_request_sends_acc_token_to_company_path(
         return httpx.Response(200, json={"RESULT": "S"})
 
     payload = common.envelope(
-        company="KIA", vendor="D191", ifid="MMPM8006", document_type="X", indata={}
+        company="KIA", vendor="test_vendor", ifid="MMPM8006", document_type="X", indata={}
     )
     with mock_client(handler) as client:
         assert common.request(client, TOKEN, payload) == {"RESULT": "S"}
@@ -165,7 +165,7 @@ def test_session_issues_one_token_for_many_calls(
 
     patch_build_client(handler)
     payload = common.envelope(
-        company="HMC", vendor="D191", ifid="MMPM8006", document_type="X", indata={}
+        company="HMC", vendor="test_vendor", ifid="MMPM8006", document_type="X", indata={}
     )
 
     with common.session("HMC") as s:

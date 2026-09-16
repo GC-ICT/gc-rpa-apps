@@ -6,8 +6,8 @@ import pytest
 from hkmc_api_app import common
 
 BASE_URL = "https://api.example.invalid"
-VENDOR = "V123"
-TOKEN = "tok-1"
+VENDOR = "test_vendor_alt"
+TOKEN = "test_token"
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -15,10 +15,10 @@ Handler = Callable[[httpx.Request], httpx.Response]
 @pytest.fixture(autouse=True)
 def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("API_BASE_URL", BASE_URL)
-    monkeypatch.setenv("HMC_CLIENT_ID", "id")
-    monkeypatch.setenv("HMC_CLIENT_SECRET", "secret")
-    monkeypatch.setenv("KIA_CLIENT_ID", "kid")
-    monkeypatch.setenv("KIA_CLIENT_SECRET", "ksecret")
+    monkeypatch.setenv("HMC_CLIENT_ID", "test_id")
+    monkeypatch.setenv("HMC_CLIENT_SECRET", "test_secret")
+    monkeypatch.setenv("KIA_CLIENT_ID", "test_kia_id")
+    monkeypatch.setenv("KIA_CLIENT_SECRET", "test_kia_secret")
     monkeypatch.setenv("VENDOR_CODE", VENDOR)
 
 

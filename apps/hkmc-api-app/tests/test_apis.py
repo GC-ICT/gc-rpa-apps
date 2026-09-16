@@ -11,8 +11,8 @@ from hkmc_api_app import api_008_parts_retro_result as api_008
 from hkmc_api_app import api_009_parts_shipment_creation as api_009
 from hkmc_api_app import common, registry
 
-VENDOR = "V123"
-TOKEN = "tok-1"
+VENDOR = "test_vendor_alt"
+TOKEN = "test_token"
 DATE = "20260914"
 
 Handler = Callable[[httpx.Request], httpx.Response]
@@ -21,49 +21,49 @@ REFERENCE = {
     "001": (
         "MMPM8006",
         "ZFMMP_S_API_DAILY_GROSS_HQ",
-        '{"I_LIFNR":"D191","I_DISPD":"20260914","I_ZPLDAYS":"30","I_WERKS":"","IN_LIST":[]}',
+        '{"I_LIFNR":"test_vendor","I_DISPD":"20260914","I_ZPLDAYS":"30","I_WERKS":"","IN_LIST":[]}',
         {},
     ),
     "002": (
         "MMPM8007",
         "ZFMMP_S_API_WEEKLY_GROSS_HQ",
-        '{"I_LIFNR":"D191","I_DISPD":"20260914","I_WERKS":"","IN_LIST":[]}',
+        '{"I_LIFNR":"test_vendor","I_DISPD":"20260914","I_WERKS":"","IN_LIST":[]}',
         {},
     ),
     "003": (
         "MMPM8008",
         "ZFMMP_S_API_DISPLAY_LP_ASN_HQ",
-        '{"I_LIFNR":"D191","I_ERDAT":"20260914"}',
+        '{"I_LIFNR":"test_vendor","I_ERDAT":"20260914"}',
         {},
     ),
     "004": (
         "MMPM8003",
         "ZFMMP_S_API_HQ_GR_INFO",
-        '{"I_LIFNR":"D191","I_BUDAT":"20260914","I_WERKS":"","IN_LIST":[]}',
+        '{"I_LIFNR":"test_vendor","I_BUDAT":"20260914","I_WERKS":"","IN_LIST":[]}',
         {},
     ),
     "005": (
         "MMPM8014",
         "ZFMMP_S_API_CONSIGNMNT",
-        '{"I_LIFNR":"D191","I_BASEDT":"20260914","I_WERKS":"1011","I_MATNR":""}',
+        '{"I_LIFNR":"test_vendor","I_BASEDT":"20260914","I_WERKS":"1011","I_MATNR":""}',
         {"werks": "1011"},
     ),
     "006": (
         "MMPM8011",
         "ZFMMP_S_API_SC_PHY_STOCK_LIST",
-        '{"I_LIFNR":"D191","I_BUDAT":"20260914","I_WERKS":"1011","I_STATUS":""}',
+        '{"I_LIFNR":"test_vendor","I_BUDAT":"20260914","I_WERKS":"1011","I_STATUS":""}',
         {},
     ),
     "007": (
         "MMPM8016",
         "ZFMMP_S_API_REQMT_HQ",
-        '{"I_LIFNR":"D191","I_WERKS":"","I_MATNR":""}',
+        '{"I_LIFNR":"test_vendor","I_WERKS":"","I_MATNR":""}',
         {},
     ),
     "008": (
         "MMPM8010",
         "ZFMMP_S_API_RETRO_RESULT",
-        '{"I_LIFNR":"D191","I_SPMON":"202609"}',
+        '{"I_LIFNR":"test_vendor","I_SPMON":"202609"}',
         {},
     ),
     "009": (
@@ -75,43 +75,43 @@ REFERENCE = {
     "010": (
         "MMPM8015",
         "ZFMMP_R_API_ADJ_CONSIGNMNT",
-        '{"I_LIFNR":"D191","I_BUDAT":"20260914","I_WERKS":"","IN_LIST":[]}',
+        '{"I_LIFNR":"test_vendor","I_BUDAT":"20260914","I_WERKS":"","IN_LIST":[]}',
         {"adjustments": []},
     ),
     "011": (
         "MMPM8012",
         "ZFMMP_R_API_SC_PHY_STOCK_SAVE",
-        '{"I_LIFNR":"D191","I_BUDAT":"20260914","I_WERKS":"","IN_LIST":[]}',
+        '{"I_LIFNR":"test_vendor","I_BUDAT":"20260914","I_WERKS":"","IN_LIST":[]}',
         {"results": []},
     ),
     "012": (
         "MMPM8001",
         "ZFMMP_S_API_MATERIAL_MASTER",
-        '{"I_LIFNR":"D191","I_WERKS":"","IN_LIST":[]}',
+        '{"I_LIFNR":"test_vendor","I_WERKS":"","IN_LIST":[]}',
         {},
     ),
     "013": (
         "MMPM8002",
         "ZFMMP_S_API_GRIV_D1",
-        '{"I_LIFNR":"D191","I_ZDSEND2_START":"20260914"}',
+        '{"I_LIFNR":"test_vendor","I_ZDSEND2_START":"20260914"}',
         {},
     ),
     "014": (
         "MMPM8005",
         "ZFMMP_S_API_GRIV_D9",
-        '{"I_LIFNR":"D191","I_SPMON":"202609"}',
+        '{"I_LIFNR":"test_vendor","I_SPMON":"202609"}',
         {},
     ),
     "015": (
         "MMPM8013",
         "ZFMMP_S_API_SC_GI_DB",
-        '{"I_LIFNR":"D191","I_SPMON":"202609","IN_LIST":[{}]}',
+        '{"I_LIFNR":"test_vendor","I_SPMON":"202609","IN_LIST":[{}]}',
         {},
     ),
     "016": (
         "MMPM8004",
         "ZFMMP_S_API_KANBAN_PO_DG",
-        '{"I_LIFNR":"D191","I_BUDAT":"20260914","I_WERKS":""}',
+        '{"I_LIFNR":"test_vendor","I_BUDAT":"20260914","I_WERKS":""}',
         {},
     ),
 }
@@ -142,7 +142,7 @@ def ids(api: common.Api) -> str:
 def build(api: common.Api, *, company: str = "HMC", dated: bool = True) -> dict[str, str]:
     _, _, _, params = REFERENCE[api.index]
     date = DATE if dated and api.base_date else None
-    return api.payload(company=company, vendor="D191", date=date, **params)
+    return api.payload(company=company, vendor="test_vendor", date=date, **params)
 
 
 @pytest.mark.parametrize("api", registry.APIS, ids=ids)
@@ -155,7 +155,7 @@ def test_envelope_constants(api: common.Api) -> None:
     payload = build(api)
 
     assert payload["COMPANY"] == "HMC"
-    assert payload["SENDER"] == "D191"
+    assert payload["SENDER"] == "test_vendor"
     assert payload["RECORD_COUNT"] == "1"
     assert payload["TARGET_SYSTEM"] == "ERPMM"
 
@@ -167,7 +167,7 @@ def test_matches_reference_example(api: common.Api) -> None:
 
     assert payload["IFID"] == ifid
     assert payload["DOCUMENTTYPE"] == document_type
-    assert payload["SERVICE_CODE"] == f"D191-MMH-B-{ifid[4:]}0"
+    assert payload["SERVICE_CODE"] == f"test_vendor-MMH-B-{ifid[4:]}0"
     if indata_json is not None:
         assert payload["INDATA_JSON"] == indata_json
 
@@ -176,7 +176,7 @@ def test_matches_reference_example(api: common.Api) -> None:
 def test_kia_switches_system_and_path(api: common.Api) -> None:
     payload = build(api, company="KIA")
 
-    assert payload["SERVICE_CODE"] == f"D191-MMK-B-{api.ifid[4:]}0"
+    assert payload["SERVICE_CODE"] == f"test_vendor-MMK-B-{api.ifid[4:]}0"
     assert common.RECEIVE_PATH[payload["COMPANY"]].startswith("/KGERPVENDOR")
 
 
@@ -193,7 +193,7 @@ def test_rejects_bad_date(api: common.Api) -> None:
     _, _, _, params = REFERENCE[api.index]
 
     with pytest.raises(ValueError, match="YYYYMMDD"):
-        api.payload(company="HMC", vendor="D191", date="2026-09-14", **params)
+        api.payload(company="HMC", vendor="test_vendor", date="2026-09-14", **params)
 
 
 @pytest.mark.parametrize("api", registry.for_company("HMC"), ids=ids)
@@ -335,7 +335,7 @@ def test_009_header_defaults_arrival_date_to_departure_date() -> None:
 
 def test_009_requires_headers_and_items() -> None:
     with pytest.raises(TypeError):
-        api_009.API.payload(company="HMC", vendor="D191")
+        api_009.API.payload(company="HMC", vendor="test_vendor")
 
 
 def test_session_serves_every_readable_api_with_one_token(
@@ -363,7 +363,7 @@ def test_session_serves_every_readable_api_with_one_token(
 def test_014_and_015_do_not_apply_retro_rule() -> None:
     for index in ("014", "015"):
         indata = json.loads(
-            registry.BY_INDEX[index].payload(company="HMC", vendor="D191", date="20260901")[
+            registry.BY_INDEX[index].payload(company="HMC", vendor="test_vendor", date="20260901")[
                 "INDATA_JSON"
             ]
         )
@@ -381,7 +381,7 @@ def test_015_defaults_in_list_to_one_empty_row() -> None:
 @pytest.mark.parametrize("index", ["010", "011"])
 def test_write_apis_require_their_rows(index: str) -> None:
     with pytest.raises(TypeError):
-        registry.BY_INDEX[index].payload(company="HMC", vendor="D191", date=DATE)
+        registry.BY_INDEX[index].payload(company="HMC", vendor="test_vendor", date=DATE)
 
 
 def test_company_specific_interfaces() -> None:
