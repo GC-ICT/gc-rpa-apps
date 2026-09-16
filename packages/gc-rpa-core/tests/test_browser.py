@@ -54,7 +54,7 @@ def test_wait_download_ignores_partial_file(downloads: Path) -> None:
         browser.wait_download(downloads, before=before, timeout=1)
 
 
-def test_move_to_relocates_file(tmp_path: Path) -> None:
+def test_move_to_appends_time_to_the_name(tmp_path: Path) -> None:
     source = tmp_path / "src"
     source.mkdir()
     downloaded = source / "test_download.xlsx"
@@ -63,9 +63,30 @@ def test_move_to_relocates_file(tmp_path: Path) -> None:
 
     moved = browser.move_to(downloaded, str(destination))
 
-    assert moved == destination / "test_download.xlsx"
+    assert moved.parent == destination
+    assert moved.stem.startswith("test_download_")
+    assert moved.suffix == ".xlsx"
+    assert len(moved.stem) == len("test_download_") + 6
     assert moved.is_file()
     assert not downloaded.exists()
+
+
+def test_move_to_can_keep_the_original_name(tmp_path: Path) -> None:
+    downloaded = tmp_path / "test_download.xlsx"
+    downloaded.write_text("x")
+    destination = tmp_path / "dst"
+
+    moved = browser.move_to(downloaded, str(destination), stamp=False)
+
+    assert moved == destination / "test_download.xlsx"
+
+
+def test_stamped_name_uses_time() -> None:
+    from datetime import datetime
+
+    name = browser.stamped_name(Path("PU010_20260916.xlsx"), datetime(2026, 9, 16, 12, 15, 30))
+
+    assert name == "PU010_20260916_121530.xlsx"
 
 
 def test_move_to_keeps_file_when_destination_blank(tmp_path: Path) -> None:
@@ -104,3 +125,33 @@ def test_show_driver_progress_is_idempotent() -> None:
 
     assert len(installed) == 1
     assert manager.level == logging.DEBUG
+
+
+def test_move_to_overwrites_existing_file(tmp_path: Path) -> None:
+    source = tmp_path / "src"
+    destination = tmp_path / "dst"
+    source.mkdir()
+    destination.mkdir()
+    downloaded = source / "test_download.xlsx"
+    downloaded.write_text("새 파일")
+    (destination / "test_download.xlsx").write_text("기존 파일")
+
+    moved = browser.move_to(downloaded, str(destination), stamp=False)
+
+    assert moved.read_text() == "새 파일"
+    assert not downloaded.exists()
+
+
+def test_move_to_works_across_filesystems(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def cross_device(*_: object) -> None:
+        raise OSError(18, "Invalid cross-device link")
+
+    monkeypatch.setattr(browser.os, "replace", cross_device)
+    downloaded = tmp_path / "test_download.xlsx"
+    downloaded.write_text("내용")
+    destination = tmp_path / "dst"
+
+    moved = browser.move_to(downloaded, str(destination))
+
+    assert moved.read_text() == "내용"
+    assert not downloaded.exists()

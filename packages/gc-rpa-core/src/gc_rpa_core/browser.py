@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 from selenium import webdriver
@@ -21,6 +23,7 @@ ELEMENT_TIMEOUT = 60
 ALERT_TIMEOUT = 5
 DOWNLOAD_TIMEOUT = 300
 PARTIAL_SUFFIXES = (".crdownload", ".tmp", ".part")
+STAMP_FORMAT = "%H%M%S"
 SLOW_START_SECONDS = 3.0
 
 MANAGER_LOGGER = "selenium.webdriver.common.selenium_manager"
@@ -145,8 +148,21 @@ def wait_download(directory: Path, *, before: set[Path], timeout: float = DOWNLO
     raise DownloadError(f"{timeout}초 안에 새 파일이 내려오지 않았습니다: {directory}")
 
 
-def move_to(path: Path, destination: str) -> Path:
+def stamped_name(path: Path, moment: datetime | None = None) -> str:
+    when = (moment or datetime.now()).strftime(STAMP_FORMAT)
+    return f"{path.stem}_{when}{path.suffix}"
+
+
+def move_to(path: Path, destination: str, *, stamp: bool = True) -> Path:
     if not destination:
         return path
-    moved = resolve_dir(destination) / path.name
-    return Path(shutil.move(str(path), str(moved)))
+
+    moved = resolve_dir(destination) / (stamped_name(path) if stamp else path.name)
+    if moved.exists():
+        logger.info("      같은 이름의 파일을 덮어씁니다: %s", moved.name)
+    try:
+        os.replace(path, moved)
+    except OSError:
+        shutil.copy2(path, moved)
+        path.unlink()
+    return moved
