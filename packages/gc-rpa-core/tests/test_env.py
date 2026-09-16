@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from gc_rpa_core import MissingConfigError, env, load_env, optional_env, require_env
-from gc_rpa_core.env import bundle_dir
+from gc_rpa_core.env import bundle_dir, env_candidates
 
 
 def test_require_env_returns_value(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -75,3 +75,52 @@ def test_bundle_dir_is_cwd_when_not_frozen(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.chdir(tmp_path)
 
     assert bundle_dir() == Path.cwd()
+
+
+def test_env_candidates_include_packed_resources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "app" / "mobisAS"))
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path / "packed"), raising=False)
+
+    candidates = env_candidates()
+
+    assert tmp_path / "app" / env.ENV_FILENAME in candidates
+    assert tmp_path / "packed" / env.ENV_FILENAME in candidates
+
+
+def test_external_env_file_wins_over_packed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    beside = tmp_path / "app"
+    packed = tmp_path / "packed"
+    beside.mkdir()
+    packed.mkdir()
+    (beside / env.ENV_FILENAME).write_text("GC_RPA_PROBE=beside\n")
+    (packed / env.ENV_FILENAME).write_text("GC_RPA_PROBE=packed\n")
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(beside / "mobisAS"))
+    monkeypatch.setattr(sys, "_MEIPASS", str(packed), raising=False)
+    monkeypatch.delenv("GC_RPA_PROBE", raising=False)
+
+    assert require_env("GC_RPA_PROBE") == "beside"
+
+
+def test_packed_env_file_is_used_when_nothing_beside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    beside = tmp_path / "app"
+    packed = tmp_path / "packed"
+    beside.mkdir()
+    packed.mkdir()
+    (packed / env.ENV_FILENAME).write_text("GC_RPA_PROBE=packed\n")
+
+    monkeypatch.chdir(beside)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(beside / "mobisAS"))
+    monkeypatch.setattr(sys, "_MEIPASS", str(packed), raising=False)
+    monkeypatch.delenv("GC_RPA_PROBE", raising=False)
+
+    assert require_env("GC_RPA_PROBE") == "packed"

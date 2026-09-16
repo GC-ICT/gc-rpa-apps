@@ -18,6 +18,13 @@ def headless() -> bool:
     return optional_env(HEADLESS_ENV, "1").strip().upper() in ("Y", "1", "T", "TRUE")
 
 
+def report(*, success: bool, message: str, detail: dict[str, str] | None = None) -> None:
+    try:
+        hub.report(job=JOB, success=success, message=message, detail=detail)
+    except Exception:
+        logger.exception("허브 보고 실패")
+
+
 def main() -> int:
     logging.basicConfig(
         level=optional_env(LOG_LEVEL_ENV, "INFO"),
@@ -28,11 +35,11 @@ def main() -> int:
         path = pu010.run(headless=headless())
     except Exception as exc:
         logger.exception("실패")
-        hub.report(job=JOB, success=False, message=f"{type(exc).__name__}: {exc}")
+        report(success=False, message=f"{type(exc).__name__}: {exc}")
         return 1
 
     logger.info("다운로드 완료: %s", path)
-    hub.report(job=JOB, success=True, message=path.name, detail={"path": str(path)})
+    report(success=True, message=path.name, detail={"path": str(path)})
     return 0
 
 

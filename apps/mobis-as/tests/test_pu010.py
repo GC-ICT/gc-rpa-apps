@@ -24,3 +24,30 @@ def test_locators_are_nexacro_ids() -> None:
 def test_menu_item_is_matched_by_screen_code_not_row_index() -> None:
     assert "[PU010]" in pu010.MY_MENU_ITEM
     assert "gridrow_" not in pu010.MY_MENU_ITEM
+
+
+def test_report_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mobis_as import __main__ as entry
+
+    def boom(**_: object) -> None:
+        raise RuntimeError("허브 죽음")
+
+    monkeypatch.setattr(entry.hub, "report", boom)
+
+    entry.report(success=False, message="원인")
+
+
+def test_main_returns_one_and_reports_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mobis_as import __main__ as entry
+
+    sent: dict[str, object] = {}
+
+    def fail(**_: object) -> None:
+        raise ValueError("다운로드 실패")
+
+    monkeypatch.setattr(entry.pu010, "run", fail)
+    monkeypatch.setattr(entry.hub, "report", lambda **kw: sent.update(kw))
+
+    assert entry.main() == 1
+    assert sent["success"] is False
+    assert "다운로드 실패" in str(sent["message"])

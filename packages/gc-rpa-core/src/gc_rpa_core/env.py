@@ -13,14 +13,27 @@ class MissingConfigError(RuntimeError):
     pass
 
 
+def frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
 def bundle_dir() -> Path:
-    frozen = getattr(sys, "frozen", False)
-    return Path(sys.executable).parent if frozen else Path.cwd()
+    return Path(sys.executable).parent if frozen() else Path.cwd()
+
+
+def resource_dir() -> Path | None:
+    packed = getattr(sys, "_MEIPASS", None)
+    return Path(packed) if packed else None
 
 
 def env_candidates() -> list[Path]:
+    bases = [bundle_dir(), *bundle_dir().parents, Path.cwd(), *Path.cwd().parents]
+    packed = resource_dir()
+    if packed is not None:
+        bases.append(packed)
+
     seen: list[Path] = []
-    for base in (bundle_dir(), *bundle_dir().parents, Path.cwd(), *Path.cwd().parents):
+    for base in bases:
         candidate = base / ENV_FILENAME
         if candidate not in seen:
             seen.append(candidate)
