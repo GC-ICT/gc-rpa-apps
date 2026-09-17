@@ -38,6 +38,9 @@ def main() -> int:
             logger.info("[1/3] 설정 조회   %s (schedule_id=%s)", name, common.schedule_id())
             hub_session.started(name=name)
 
+            complaint = common.poppler_complaint()
+            if complaint:
+                logger.warning("      %s", complaint)
             workspace = common.workspace(settings)
             downloads = common.download_dir(settings)
             logger.info("[2/3] 받은편지함   %s", workspace)
