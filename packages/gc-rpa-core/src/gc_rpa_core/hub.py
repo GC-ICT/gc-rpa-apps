@@ -84,10 +84,13 @@ class Session:
     def failed(self, *, message: str, name: str = "") -> None:
         self.send(ERROR_LEVEL, message, name=name)
 
+    def progress(self, *, message: str, name: str = "") -> None:
+        self.send(INFO_LEVEL, message, name=name)
+
 
 class HubHandler(logging.Handler):
-    def __init__(self, session: Session, *, name: str = "") -> None:
-        super().__init__()
+    def __init__(self, session: Session, *, name: str = "", level: int = logging.ERROR) -> None:
+        super().__init__(level)
         self.session = session
         self.system_name = name
 
@@ -102,8 +105,13 @@ class HubHandler(logging.Handler):
 
 
 @contextmanager
-def forwarding(session: Session, *loggers: logging.Logger, name: str = "") -> Iterator[HubHandler]:
-    handler = HubHandler(session, name=name)
+def forwarding(
+    session: Session,
+    *loggers: logging.Logger,
+    name: str = "",
+    level: int = logging.ERROR,
+) -> Iterator[HubHandler]:
+    handler = HubHandler(session, name=name, level=level)
     for target in loggers:
         target.addHandler(handler)
     try:

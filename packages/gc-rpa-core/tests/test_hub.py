@@ -107,3 +107,55 @@ def test_method_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SIGNALR_METHOD", "ReportResult")
 
     assert hub.method() == "ReportResult"
+
+
+def test_progress_sends_info(connected: Any) -> None:
+    session, client = connected
+
+    session.progress(message="HMC 003 1,240행 (3/8)")
+
+    assert client.sent[0][1] == [
+        "test_group",
+        "test_system",
+        hub.INFO_LEVEL,
+        "HMC 003 1,240행 (3/8)",
+    ]
+
+
+def test_forwarding_relays_errors_only_by_default(connected: Any) -> None:
+    import logging
+
+    session, client = connected
+    logger = logging.getLogger("test_forwarding_default")
+    logger.setLevel(logging.INFO)
+
+    with hub.forwarding(session, logger):
+        logger.info("조용히 넘어갈 줄")
+        logger.error("전달될 줄")
+
+    assert [arguments[3] for _, arguments in client.sent] == ["전달될 줄"]
+
+
+def test_forwarding_level_can_be_widened(connected: Any) -> None:
+    import logging
+
+    session, client = connected
+    logger = logging.getLogger("test_forwarding_widened")
+    logger.setLevel(logging.INFO)
+
+    with hub.forwarding(session, logger, level=logging.INFO):
+        logger.info("전달될 줄")
+
+    assert [arguments[3] for _, arguments in client.sent] == ["전달될 줄"]
+
+
+def test_forwarding_removes_the_handler_on_exit(connected: Any) -> None:
+    import logging
+
+    session, _ = connected
+    logger = logging.getLogger("test_forwarding_cleanup")
+
+    with hub.forwarding(session, logger) as handler:
+        assert handler in logger.handlers
+
+    assert handler not in logger.handlers
