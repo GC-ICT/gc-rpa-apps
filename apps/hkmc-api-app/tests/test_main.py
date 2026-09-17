@@ -241,3 +241,56 @@ def test_007_sweeps_every_plant_of_the_company() -> None:
     from hkmc_api_app import common, registry
 
     assert registry.plants_for(registry.BY_INDEX["007"], "KIA") == tuple(common.PLANTS["KIA"])
+
+
+def _no_io(monkeypatch: pytest.MonkeyPatch) -> None:
+    @contextmanager
+    def nothing() -> Iterator[None]:
+        yield None
+
+    monkeypatch.setattr(entry.common, "build_client", nothing)
+    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: nothing())
+    monkeypatch.setattr(entry.common, "open_session", lambda _client, company: company)
+
+
+def _always_fails(*_: object) -> int:
+    raise RuntimeError("인터페이스가 응답하지 않습니다")
+
+
+def test_expected_failure_is_not_counted_as_a_failure(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _no_io(monkeypatch)
+    monkeypatch.setattr(entry, "collect", _always_fails)
+
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("006",))
+    with caplog.at_level("INFO", logger=entry.FALLBACK_SYSTEM):
+        totals = entry.run(_settings(), build)
+
+    assert totals == {"HMC/006": 0, "KIA/006": 0}
+    assert all(record.levelname == "INFO" for record in caplog.records)
+    assert all(
+        "(예상된 오류)" in record.getMessage()
+        for record in caplog.records
+        if "실패" in record.getMessage()
+    )
+
+
+def test_unexpected_failure_is_still_counted(monkeypatch: pytest.MonkeyPatch) -> None:
+    _no_io(monkeypatch)
+    monkeypatch.setattr(entry, "collect", _always_fails)
+
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001",))
+    totals = entry.run(_settings(), build)
+
+    assert totals == {"HMC/001": -1, "KIA/001": -1}
+
+
+def test_expected_empty_is_per_company(monkeypatch: pytest.MonkeyPatch) -> None:
+    _no_io(monkeypatch)
+    monkeypatch.setattr(entry, "collect", _always_fails)
+
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("005",))
+    totals = entry.run(_settings(), build)
+
+    assert totals == {"HMC/005": 0, "KIA/005": -1}

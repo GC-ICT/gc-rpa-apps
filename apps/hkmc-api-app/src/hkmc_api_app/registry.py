@@ -59,6 +59,19 @@ def ordered(indexes: Iterable[str]) -> tuple[Api, ...]:
     return tuple(api for api in READABLE if api.index in chosen)
 
 
+EXPECTED_EMPTY = {
+    "003": ("KIA",),
+    "005": ("HMC",),
+    "006": ("HMC", "KIA"),
+    "015": ("KIA",),
+    "016": ("HMC",),
+}
+
+
+def expected_empty(api: Api, company: str) -> bool:
+    return company in EXPECTED_EMPTY.get(api.index, ())
+
+
 SWEEP_PLANTS = {
     "005": lambda company: api_005.INVENTORY_PLANTS[company],
     "007": lambda company: tuple(common.PLANTS[company]),

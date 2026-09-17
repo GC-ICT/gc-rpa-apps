@@ -73,10 +73,13 @@ def collect(api: Api, opened: Session, writer: loader.Writer) -> int:
     else:
         results = {"": api.fetch(opened)}
 
+    expected = registry.expected_empty(api, company)
+
     answered = [result for result in results.values() if succeeded(result)]
     if not answered:
         first = next(iter(results.values()))
-        logger.info("      %-4s 건너뜀 (%s)", company, message(first)[:32])
+        note = " (예상된 오류)" if expected else ""
+        logger.info("      %-4s 건너뜀 (%s)%s", company, message(first)[:32], note)
         return 0
 
     counts = loader.load_rows(api, api.collect_all(results), company=company, writer=writer)
@@ -115,9 +118,14 @@ def run(
             for company, opened in sessions.items():
                 if not api.supports(company):
                     continue
+                expected = registry.expected_empty(api, company)
                 try:
                     rows = collect(api, opened, writer)
                 except Exception as exc:
+                    if expected:
+                        logger.info("      %-4s 실패: %s (예상된 오류)", company, describe(exc))
+                        totals[f"{company}/{api.index}"] = 0
+                        continue
                     logger.error("      %-4s 실패: %s", company, describe(exc))
                     totals[f"{company}/{api.index}"] = -1
                     continue
