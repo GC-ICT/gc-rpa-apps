@@ -3,14 +3,16 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import InvalidSessionIdException, TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
@@ -25,6 +27,18 @@ DOWNLOAD_TIMEOUT = 300
 PARTIAL_SUFFIXES = (".crdownload", ".tmp", ".part")
 STAMP_FORMAT = "%H%M%S"
 SLOW_START_SECONDS = 3.0
+
+CDP_TIMEOUT = 20.0
+
+DEAD_SESSION_MARKERS = (
+    "max retries exceeded",
+    "invalid session id",
+    "failed to establish a new connection",
+    "connection refused",
+    "remote end closed connection without response",
+    "chrome not reachable",
+    "no such session",
+)
 
 MANAGER_LOGGER = "selenium.webdriver.common.selenium_manager"
 MANAGER_KEYWORDS = (
@@ -56,6 +70,56 @@ class DownloadError(RuntimeError):
     pass
 
 
+class RendererHangError(RuntimeError):
+    pass
+
+
+def causes(exc: BaseException) -> Iterator[BaseException]:
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        current = current.__cause__ or current.__context__
+
+
+def session_dead(exc: BaseException) -> bool:
+    from urllib3.exceptions import MaxRetryError, NewConnectionError, ProtocolError
+
+    dead = (InvalidSessionIdException, MaxRetryError, ProtocolError, NewConnectionError)
+    for cause in causes(exc):
+        if isinstance(cause, dead):
+            return True
+        if any(marker in str(cause).lower() for marker in DEAD_SESSION_MARKERS):
+            return True
+    return False
+
+
+def call_cdp(
+    driver: WebDriver, command: str, params: dict[str, Any], *, timeout: float = CDP_TIMEOUT
+) -> dict[str, Any]:
+    outcome: dict[str, Any] = {}
+
+    def work() -> None:
+        try:
+            outcome["result"] = driver.execute_cdp_cmd(command, params)
+        except BaseException as exc:
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=work, name=f"cdp-{command}", daemon=True)
+    worker.start()
+    worker.join(timeout)
+
+    if worker.is_alive():
+        raise RendererHangError(
+            f"{command} 가 {timeout:g}초 안에 끝나지 않았습니다 (렌더러 무응답)"
+        )
+    if "error" in outcome:
+        raise outcome["error"]
+    result: dict[str, Any] = outcome.get("result") or {}
+    return result
+
+
 def resolve_dir(value: str) -> Path:
     path = Path(value).expanduser().resolve()
     path.mkdir(parents=True, exist_ok=True)
@@ -63,12 +127,20 @@ def resolve_dir(value: str) -> Path:
 
 
 @contextmanager
-def chrome(url: str, *, download_dir: Path, headless: bool = False) -> Iterator[WebDriver]:
+def chrome(
+    url: str,
+    *,
+    download_dir: Path,
+    headless: bool = False,
+    keep_dialogs: bool = False,
+) -> Iterator[WebDriver]:
     options = Options()
     options.add_argument("--allow-running-insecure-content")
     options.add_argument(f"--unsafely-treat-insecure-origin-as-secure={url}")
     if headless:
         options.add_argument("--headless=new")
+    if keep_dialogs:
+        options.set_capability("unhandledPromptBehavior", "ignore")
     options.add_argument("--window-size={},{}".format(*WINDOW_SIZE))
     options.accept_insecure_certs = True
     options.add_experimental_option(
