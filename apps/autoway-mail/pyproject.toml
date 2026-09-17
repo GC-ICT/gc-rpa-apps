@@ -5,6 +5,8 @@ description = "오토웨이 메일 연동 앱"
 requires-python = ">=3.12"
 dependencies = [
     "gc-rpa-core",
+    "pdf2image>=1.17",
+    "selenium>=4.27",
 ]
 
 [build-system]

@@ -13,7 +13,7 @@ if env_file.is_file():
 else:
     print("[build.spec] .env 가 없어 실행파일에 포함하지 않습니다.")
 
-for package in ("pymssql", "pysignalr", "dotenv"):
+for package in ("pymssql", "pysignalr", "dotenv", "selenium", "pdf2image"):
     package_datas, package_binaries, package_hidden = collect_all(package)
     datas += package_datas
     binaries += package_binaries
@@ -48,7 +48,16 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports
-    + ["autoway_mail", "autoway_mail.common", "autoway_mail.mail", "gc_rpa_core"],
+    + [
+        "autoway_mail",
+        "autoway_mail.capture",
+        "autoway_mail.common",
+        "autoway_mail.erp",
+        "autoway_mail.history",
+        "autoway_mail.inbox",
+        "autoway_mail.mail",
+        "gc_rpa_core",
+    ],
     excludes=["tkinter", "pytest", "mypy", "ruff", "IPython"],
     noarchive=False,
 )
