@@ -52,18 +52,6 @@ def _settings(name: str) -> RpaConfig:
     )
 
 
-def test_notify_never_raises() -> None:
-    def boom(**_: object) -> None:
-        raise RuntimeError("허브 죽음")
-
-    entry.notify(boom, message="원인")
-
-
-def test_describe_handles_empty_exception_message() -> None:
-    assert entry.describe(ValueError()) == "ValueError: 상세 메시지가 없습니다"
-    assert entry.describe(ValueError("원인")) == "ValueError: 원인"
-
-
 def test_main_returns_one_and_reports_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     sent: dict[str, object] = {}
 
@@ -72,7 +60,7 @@ def test_main_returns_one_and_reports_failure(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(entry.mail, "load", lambda: _settings("테스트 RPA"))
     monkeypatch.setattr(entry.mail, "run", fail)
-    monkeypatch.setattr(entry, "reporter", _reporter(sent))
+    monkeypatch.setattr(entry.hub, "session", _reporter(sent))
 
     assert entry.main() == 1
     assert sent["name"] == "테스트 RPA"
@@ -84,7 +72,7 @@ def test_main_falls_back_when_config_has_no_name(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(entry.mail, "load", lambda: _settings(""))
     monkeypatch.setattr(entry.mail, "run", lambda *_a, **_k: Path("x.xlsx"))
-    monkeypatch.setattr(entry, "reporter", _reporter(sent))
+    monkeypatch.setattr(entry.hub, "session", _reporter(sent))
 
     assert entry.main() == 0
     assert sent["name"] == entry.FALLBACK_SYSTEM

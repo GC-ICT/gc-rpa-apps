@@ -53,3 +53,13 @@ def test_matrix_matches_the_registry(index: str, company: str, state: str) -> No
 def test_expected_empty_names_only_readable_apis() -> None:
     for index in registry.EXPECTED_EMPTY:
         assert not registry.BY_INDEX[index].writes
+
+
+def test_ordered_keeps_index_order_and_drops_write_apis() -> None:
+    chosen = registry.ordered(("016", "009", "001"))
+
+    assert [api.index for api in chosen] == ["001", "016"]
+
+
+def test_ordered_ignores_unknown_indexes() -> None:
+    assert registry.ordered(("999",)) == ()

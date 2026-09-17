@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -12,6 +13,16 @@ from hkmc_api_app.build_settings import Build
 
 def _build(name: str = "hkmc-api-001", schedule_id: str = "4") -> Build:
     return Build(name=name, schedule_id=schedule_id, indexes=("001", "002"))
+
+
+@dataclass
+class _FakeSession:
+    company: str
+
+
+@contextmanager
+def _nothing() -> Iterator[None]:
+    yield None
 
 
 def _endpoint() -> DbEndpoint:
@@ -74,31 +85,35 @@ def test_schedule_id_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
     assert entry.schedule_id(_build(schedule_id="6")) == "9"
 
 
-def test_routines_follow_the_build_indexes() -> None:
-    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "007", "016"))
+def test_summarize_counts_rows_and_failures() -> None:
+    summary, broken = entry.summarize_totals(
+        {"HMC/001": 307, "KIA/001": 0, "HMC/006": entry.FAILED}
+    )
 
-    assert [api.index for api in entry.routines(build, "HMC")] == ["001", "016"]
-    assert [api.index for api in entry.routines(build, "KIA")] == ["001", "007"]
+    assert broken == ["HMC/006"]
+    assert "3건 조회, 307행 데이터 쓰기" in summary
+    assert "실패 1건: HMC/006" in summary
 
 
-def test_routines_exclude_write_apis() -> None:
-    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("009", "010", "011"))
+def test_summarize_says_nothing_about_failures_when_there_are_none() -> None:
+    summary, broken = entry.summarize_totals({"HMC/001": 307})
 
-    assert entry.routines(build, "HMC") == ()
+    assert broken == []
+    assert summary == "1건 조회, 307행 데이터 쓰기"
 
 
 def test_run_walks_each_number_across_companies(monkeypatch: pytest.MonkeyPatch) -> None:
     visited: list[tuple[str, str]] = []
 
-    @contextmanager
-    def nothing() -> Iterator[None]:
-        yield None
-
-    monkeypatch.setattr(entry.common, "build_client", nothing)
-    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: nothing())
-    monkeypatch.setattr(entry.common, "open_session", lambda _client, company: company)
+    monkeypatch.setattr(entry.common, "build_client", _nothing)
+    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: _nothing())
     monkeypatch.setattr(
-        entry, "collect", lambda api, opened, _writer: visited.append((api.index, opened)) or 0
+        entry.common, "open_session", lambda _client, company: _FakeSession(company)
+    )
+    monkeypatch.setattr(
+        entry,
+        "collect_rows",
+        lambda api, opened, _writer: visited.append((api.index, opened.company)) or 0,
     )
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "007", "016"))
@@ -115,16 +130,14 @@ def test_run_walks_each_number_across_companies(monkeypatch: pytest.MonkeyPatch)
 def test_run_opens_one_session_per_company(monkeypatch: pytest.MonkeyPatch) -> None:
     opened: list[str] = []
 
-    @contextmanager
-    def nothing() -> Iterator[None]:
-        yield None
-
-    monkeypatch.setattr(entry.common, "build_client", nothing)
-    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: nothing())
+    monkeypatch.setattr(entry.common, "build_client", _nothing)
+    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: _nothing())
     monkeypatch.setattr(
-        entry.common, "open_session", lambda _client, company: opened.append(company) or company
+        entry.common,
+        "open_session",
+        lambda _client, company: opened.append(company) or _FakeSession(company),
     )
-    monkeypatch.setattr(entry, "collect", lambda *_: 0)
+    monkeypatch.setattr(entry, "collect_rows", lambda *_: 0)
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "002", "003"))
     entry.run(_settings(), build)
@@ -135,16 +148,14 @@ def test_run_opens_one_session_per_company(monkeypatch: pytest.MonkeyPatch) -> N
 def test_run_skips_a_company_with_nothing_to_do(monkeypatch: pytest.MonkeyPatch) -> None:
     opened: list[str] = []
 
-    @contextmanager
-    def nothing() -> Iterator[None]:
-        yield None
-
-    monkeypatch.setattr(entry.common, "build_client", nothing)
-    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: nothing())
+    monkeypatch.setattr(entry.common, "build_client", _nothing)
+    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: _nothing())
     monkeypatch.setattr(
-        entry.common, "open_session", lambda _client, company: opened.append(company) or company
+        entry.common,
+        "open_session",
+        lambda _client, company: opened.append(company) or _FakeSession(company),
     )
-    monkeypatch.setattr(entry, "collect", lambda *_: 0)
+    monkeypatch.setattr(entry, "collect_rows", lambda *_: 0)
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("016",))
     entry.run(_settings(), build)
@@ -180,17 +191,12 @@ def test_system_name_falls_back_to_the_build_name() -> None:
     assert entry.system_name(_build(), _settings("")) == "hkmc-api-001"
 
 
-def test_describe_handles_empty_exception_message() -> None:
-    assert entry.describe(ValueError()) == "ValueError: 상세 메시지가 없습니다"
-    assert entry.describe(ValueError("원인")) == "ValueError: 원인"
-
-
 def test_main_reports_success_with_a_summary(monkeypatch: pytest.MonkeyPatch) -> None:
     sent: dict[str, object] = {}
     monkeypatch.setattr(entry.build_settings, "current", _build)
     monkeypatch.setattr(entry.config, "load", lambda _: _settings())
     monkeypatch.setattr(entry, "run", lambda *_, **__: {"HMC/001": 307, "KIA/001": 142})
-    monkeypatch.setattr(entry, "reporter", _reporter(sent))
+    monkeypatch.setattr(entry.hub, "session", _reporter(sent))
 
     assert entry.main() == 0
     assert "finished" in sent
@@ -202,7 +208,7 @@ def test_main_reports_failure_when_an_api_breaks(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(entry.build_settings, "current", _build)
     monkeypatch.setattr(entry.config, "load", lambda _: _settings())
     monkeypatch.setattr(entry, "run", lambda *_, **__: {"HMC/001": 307, "HMC/006": -1})
-    monkeypatch.setattr(entry, "reporter", _reporter(sent))
+    monkeypatch.setattr(entry.hub, "session", _reporter(sent))
 
     assert entry.main() == 1
     assert "failed" in sent
@@ -217,7 +223,7 @@ def test_main_returns_one_when_schedule_is_missing(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(entry.build_settings, "current", _build)
     monkeypatch.setattr(entry.config, "load", boom)
-    monkeypatch.setattr(entry, "reporter", _reporter(sent))
+    monkeypatch.setattr(entry.hub, "session", _reporter(sent))
 
     assert entry.main() == 1
     assert "설정이 없습니다" in str(sent["failed"])
@@ -244,13 +250,11 @@ def test_007_sweeps_every_plant_of_the_company() -> None:
 
 
 def _no_io(monkeypatch: pytest.MonkeyPatch) -> None:
-    @contextmanager
-    def nothing() -> Iterator[None]:
-        yield None
-
-    monkeypatch.setattr(entry.common, "build_client", nothing)
-    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: nothing())
-    monkeypatch.setattr(entry.common, "open_session", lambda _client, company: company)
+    monkeypatch.setattr(entry.common, "build_client", _nothing)
+    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: _nothing())
+    monkeypatch.setattr(
+        entry.common, "open_session", lambda _client, company: _FakeSession(company)
+    )
 
 
 def _always_fails(*_: object) -> int:
@@ -261,7 +265,7 @@ def test_expected_failure_is_not_counted_as_a_failure(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     _no_io(monkeypatch)
-    monkeypatch.setattr(entry, "collect", _always_fails)
+    monkeypatch.setattr(entry, "collect_rows", _always_fails)
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("006",))
     with caplog.at_level("INFO", logger=entry.FALLBACK_SYSTEM):
@@ -278,7 +282,7 @@ def test_expected_failure_is_not_counted_as_a_failure(
 
 def test_unexpected_failure_is_still_counted(monkeypatch: pytest.MonkeyPatch) -> None:
     _no_io(monkeypatch)
-    monkeypatch.setattr(entry, "collect", _always_fails)
+    monkeypatch.setattr(entry, "collect_rows", _always_fails)
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001",))
     totals = entry.run(_settings(), build)
@@ -288,7 +292,7 @@ def test_unexpected_failure_is_still_counted(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_expected_empty_is_per_company(monkeypatch: pytest.MonkeyPatch) -> None:
     _no_io(monkeypatch)
-    monkeypatch.setattr(entry, "collect", _always_fails)
+    monkeypatch.setattr(entry, "collect_rows", _always_fails)
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("005",))
     totals = entry.run(_settings(), build)

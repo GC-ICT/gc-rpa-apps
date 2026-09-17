@@ -49,11 +49,6 @@ def for_company(company: str) -> tuple[Api, ...]:
     return tuple(api for api in READABLE if api.supports(company))
 
 
-def for_indexes(indexes: Iterable[str], company: str) -> tuple[Api, ...]:
-    chosen = set(indexes)
-    return tuple(api for api in for_company(company) if api.index in chosen)
-
-
 def ordered(indexes: Iterable[str]) -> tuple[Api, ...]:
     chosen = set(indexes)
     return tuple(api for api in READABLE if api.index in chosen)
