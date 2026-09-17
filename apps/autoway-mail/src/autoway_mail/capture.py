@@ -33,6 +33,7 @@ POPUP_SETTLE = 0.5
 BODY_TIMEOUT = 15.0
 BODY_MIN_TEXT = 20
 BODY_POLL = 0.5
+EXPAND_SETTLE = 0.6
 
 ATTACHMENT_TIMEOUT = 3.0
 EXPORT_TIMEOUT = 10.0
@@ -58,11 +59,30 @@ PIXELS_PER_INCH = 96.0
 PAGE_PADDING = 0.2
 MAX_PAGE_INCHES = 200.0
 
-HIDE_SCROLLBARS = """
-var style = document.createElement('style');
-style.textContent = '::-webkit-scrollbar{display:none !important}'
-  + 'html,body{overflow:visible !important;height:auto !important}';
-document.head.appendChild(style);
+EXPAND_PAGE = """
+var loose = '::-webkit-scrollbar{display:none !important}'
+  + 'html,body{overflow:visible !important;height:auto !important;max-height:none !important}';
+function relax(doc) {
+  var style = doc.createElement('style');
+  style.textContent = loose;
+  (doc.head || doc.documentElement).appendChild(style);
+}
+relax(document);
+var frames = document.querySelectorAll('iframe, frame');
+for (var i = 0; i < frames.length; i++) {
+  try {
+    var inner = frames[i].contentDocument;
+    if (!inner || !inner.body) { continue; }
+    relax(inner);
+    var tall = Math.max(inner.body.scrollHeight, inner.documentElement.scrollHeight);
+    var wide = Math.max(inner.body.scrollWidth, inner.documentElement.scrollWidth);
+    frames[i].setAttribute('scrolling', 'no');
+    frames[i].style.height = tall + 'px';
+    frames[i].style.maxHeight = 'none';
+    if (wide > frames[i].clientWidth) { frames[i].style.width = wide + 'px'; }
+  } catch (e) {}
+}
+return frames.length;
 """
 
 logger = logging.getLogger(__name__)
@@ -254,9 +274,11 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     path = folder / PDF_NAME
 
     try:
-        driver.execute_script(HIDE_SCROLLBARS)
+        frames = driver.execute_script(EXPAND_PAGE)
+        logger.debug("      본문 프레임 %s개를 펼쳤습니다", frames)
+        time.sleep(EXPAND_SETTLE)
     except Exception:
-        logger.debug("      스크롤바 숨기기를 건너뜁니다")
+        logger.debug("      본문 펼치기를 건너뜁니다")
 
     try:
         call_cdp(
