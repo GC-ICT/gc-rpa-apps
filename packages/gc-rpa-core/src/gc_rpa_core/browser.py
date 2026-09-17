@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import shutil
+import signal
+import subprocess
 import threading
 import time
 from collections.abc import Iterator
@@ -29,6 +32,9 @@ STAMP_FORMAT = "%H%M%S"
 SLOW_START_SECONDS = 3.0
 
 CDP_TIMEOUT = 20.0
+
+BROWSER_PROCESSES = ("chrome.exe", "chromedriver.exe")
+TERMINATION_SIGNALS = ("SIGINT", "SIGTERM", "SIGBREAK")
 
 DEAD_SESSION_MARKERS = (
     "max retries exceeded",
@@ -118,6 +124,31 @@ def call_cdp(
         raise outcome["error"]
     result: dict[str, Any] = outcome.get("result") or {}
     return result
+
+
+def kill_browsers() -> None:
+    if os.name != "nt":
+        logger.debug("윈도우가 아니라 잔여 브라우저 정리를 건너뜁니다")
+        return
+    for name in BROWSER_PROCESSES:
+        subprocess.run(["taskkill", "/F", "/IM", name, "/T"], capture_output=True, check=False)
+
+
+def clean_up_browsers_on_exit() -> None:
+    def handle(number: int, frame: object) -> None:
+        logger.warning("종료 신호 %s 를 받아 브라우저를 정리합니다", number)
+        kill_browsers()
+        os._exit(1)
+
+    for name in TERMINATION_SIGNALS:
+        number = getattr(signal, name, None)
+        if number is None:
+            continue
+        try:
+            signal.signal(number, handle)
+        except (OSError, ValueError):
+            logger.debug("%s 처리기를 걸지 못했습니다", name)
+    atexit.register(kill_browsers)
 
 
 def resolve_dir(value: str) -> Path:

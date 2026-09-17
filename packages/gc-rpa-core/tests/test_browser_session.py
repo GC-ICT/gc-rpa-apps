@@ -109,3 +109,43 @@ def test_call_cdp_does_not_wait_for_a_hung_command_to_finish() -> None:
         assert time.monotonic() - started < 2.0
     finally:
         release.set()
+
+
+def test_kill_browsers_does_nothing_off_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    from gc_rpa_core import browser
+
+    monkeypatch.setattr(browser.os, "name", "posix")
+    monkeypatch.setattr(
+        subprocess, "run", lambda *_a, **_k: pytest.fail("윈도우가 아니면 죽이지 않습니다")
+    )
+
+    browser.kill_browsers()
+
+
+def test_kill_browsers_targets_chrome_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    from gc_rpa_core import browser
+
+    called: list[list[str]] = []
+    monkeypatch.setattr(browser.os, "name", "nt")
+    monkeypatch.setattr(browser.subprocess, "run", lambda args, **_k: called.append(args))
+
+    browser.kill_browsers()
+
+    assert [args[3] for args in called] == list(browser.BROWSER_PROCESSES)
+
+
+def test_exit_cleanup_registers_handlers(monkeypatch: pytest.MonkeyPatch) -> None:
+    import signal
+
+    from gc_rpa_core import browser
+
+    installed: list[int] = []
+    monkeypatch.setattr(signal, "signal", lambda number, _handler: installed.append(number))
+    monkeypatch.setattr(browser.atexit, "register", lambda _f: None)
+
+    browser.clean_up_browsers_on_exit()
+
+    assert signal.SIGTERM in installed
+    assert signal.SIGINT in installed
