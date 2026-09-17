@@ -76,13 +76,13 @@ def collect(api: Api, opened: Session, writer: loader.Writer) -> int:
     answered = [result for result in results.values() if succeeded(result)]
     if not answered:
         first = next(iter(results.values()))
-        logger.info("      %s %-28s 건너뜀 (%s)", api.index, api.name, message(first)[:32])
+        logger.info("      %-4s 건너뜀 (%s)", company, message(first)[:32])
         return 0
 
     counts = loader.load_rows(api, api.collect_all(results), company=company, writer=writer)
     total = sum(counts.values())
     received = sum(record_count(result) for result in answered)
-    logger.info("      %s %-28s %d행 (응답 %d건)", api.index, api.name, total, received)
+    logger.info("      %-4s %d행 (응답 %d건)", company, total, received)
     return total
 
 
@@ -97,26 +97,32 @@ def run(
     report: Callable[[str], None] = lambda _: None,
 ) -> dict[str, int]:
     totals: dict[str, int] = {}
-    steps = len(companies()) + 1
+    chosen = registry.ordered(build.indexes)
+    if not chosen:
+        logger.info("수행할 API 가 없습니다")
+        return totals
+
+    steps = len(chosen) + 1
+    targets = tuple(
+        company for company in companies() if any(api.supports(company) for api in chosen)
+    )
 
     with common.build_client() as client, loader.writer(settings.source) as writer:
-        for position, company in enumerate(companies(), start=1):
-            logger.info("[%d/%d] %s", position + 1, steps, company)
-            chosen = routines(build, company)
-            if not chosen:
-                logger.info("      수행할 API 가 없습니다")
-                continue
+        sessions = {company: common.open_session(client, company) for company in targets}
 
-            opened = common.open_session(client, company)
-            for done, api in enumerate(chosen, start=1):
+        for done, api in enumerate(chosen, start=1):
+            logger.info("[%d/%d] %s %s", done + 1, steps, api.index, api.name)
+            for company, opened in sessions.items():
+                if not api.supports(company):
+                    continue
                 try:
                     rows = collect(api, opened, writer)
                 except Exception as exc:
-                    logger.error("      %s %-28s 실패: %s", api.index, api.name, describe(exc))
+                    logger.error("      %-4s 실패: %s", company, describe(exc))
                     totals[f"{company}/{api.index}"] = -1
                     continue
                 totals[f"{company}/{api.index}"] = rows
-                report(f"{company} {api.index} {api.name} {rows}행 ({done}/{len(chosen)})")
+                report(f"{api.index} {api.name} {company} {rows}행 ({done}/{len(chosen)})")
 
     return totals
 
@@ -142,7 +148,7 @@ def main() -> int:
             banner(name)
             logger.info(
                 "[1/%d] 설정 조회   %s (build=%s, schedule_id=%s, API %s)",
-                len(companies()) + 1,
+                len(build.indexes) + 1,
                 name,
                 build.name,
                 schedule_id(build),

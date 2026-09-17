@@ -87,6 +87,71 @@ def test_routines_exclude_write_apis() -> None:
     assert entry.routines(build, "HMC") == ()
 
 
+def test_run_walks_each_number_across_companies(monkeypatch: pytest.MonkeyPatch) -> None:
+    visited: list[tuple[str, str]] = []
+
+    @contextmanager
+    def nothing() -> Iterator[None]:
+        yield None
+
+    monkeypatch.setattr(entry.common, "build_client", nothing)
+    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: nothing())
+    monkeypatch.setattr(entry.common, "open_session", lambda _client, company: company)
+    monkeypatch.setattr(
+        entry, "collect", lambda api, opened, _writer: visited.append((api.index, opened)) or 0
+    )
+
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "007", "016"))
+    entry.run(_settings(), build)
+
+    assert visited == [
+        ("001", "HMC"),
+        ("001", "KIA"),
+        ("007", "KIA"),
+        ("016", "HMC"),
+    ]
+
+
+def test_run_opens_one_session_per_company(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[str] = []
+
+    @contextmanager
+    def nothing() -> Iterator[None]:
+        yield None
+
+    monkeypatch.setattr(entry.common, "build_client", nothing)
+    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: nothing())
+    monkeypatch.setattr(
+        entry.common, "open_session", lambda _client, company: opened.append(company) or company
+    )
+    monkeypatch.setattr(entry, "collect", lambda *_: 0)
+
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "002", "003"))
+    entry.run(_settings(), build)
+
+    assert opened == ["HMC", "KIA"]
+
+
+def test_run_skips_a_company_with_nothing_to_do(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[str] = []
+
+    @contextmanager
+    def nothing() -> Iterator[None]:
+        yield None
+
+    monkeypatch.setattr(entry.common, "build_client", nothing)
+    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: nothing())
+    monkeypatch.setattr(
+        entry.common, "open_session", lambda _client, company: opened.append(company) or company
+    )
+    monkeypatch.setattr(entry, "collect", lambda *_: 0)
+
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("016",))
+    entry.run(_settings(), build)
+
+    assert opened == ["HMC"]
+
+
 def test_companies_default_to_both(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(entry.COMPANIES_ENV, raising=False)
 

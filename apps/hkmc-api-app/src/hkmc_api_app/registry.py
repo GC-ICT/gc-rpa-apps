@@ -54,6 +54,11 @@ def for_indexes(indexes: Iterable[str], company: str) -> tuple[Api, ...]:
     return tuple(api for api in for_company(company) if api.index in chosen)
 
 
+def ordered(indexes: Iterable[str]) -> tuple[Api, ...]:
+    chosen = set(indexes)
+    return tuple(api for api in READABLE if api.index in chosen)
+
+
 SWEEP_PLANTS = {
     "005": lambda company: api_005.INVENTORY_PLANTS[company],
     "007": lambda company: tuple(common.PLANTS[company]),
