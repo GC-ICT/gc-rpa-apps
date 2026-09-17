@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -49,7 +48,7 @@ def quiet_browser(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_main_reports_the_tally(
-    monkeypatch: pytest.MonkeyPatch, workspace: Path, quiet_browser: None, rpa_settings: RpaConfig
+    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig
 ) -> None:
     sent: dict[str, Any] = {}
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
@@ -61,7 +60,7 @@ def test_main_reports_the_tally(
 
 
 def test_main_returns_one_when_a_mail_failed(
-    monkeypatch: pytest.MonkeyPatch, workspace: Path, quiet_browser: None, rpa_settings: RpaConfig
+    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig
 ) -> None:
     sent: dict[str, Any] = {}
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
@@ -73,7 +72,7 @@ def test_main_returns_one_when_a_mail_failed(
 
 
 def test_main_returns_one_when_the_schedule_is_missing(
-    monkeypatch: pytest.MonkeyPatch, workspace: Path
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sent: dict[str, Any] = {}
 
@@ -88,7 +87,7 @@ def test_main_returns_one_when_the_schedule_is_missing(
 
 
 def test_main_falls_back_when_the_schedule_has_no_name(
-    monkeypatch: pytest.MonkeyPatch, workspace: Path, quiet_browser: None, rpa_settings: RpaConfig
+    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig
 ) -> None:
     rpa_settings = replace(rpa_settings, name="")
     sent: dict[str, Any] = {}

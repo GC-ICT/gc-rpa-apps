@@ -8,13 +8,11 @@ from selenium.webdriver.remote.webdriver import WebDriver
 
 from gc_rpa_core import config
 from gc_rpa_core.browser import accept_alert, click, fill, resolve_dir, wait_ready
-from gc_rpa_core.env import bundle_dir, optional_env
+from gc_rpa_core.env import optional_env
 
 SCHEDULE_ID_ENV = "AUTOWAY_MAIL_SCHEDULE_ID"
 DEFAULT_SCHEDULE_ID = "5"
 
-WORKSPACE_ENV = "AUTOWAY_MAIL_DIR"
-DEFAULT_WORKSPACE = "autoway-mail"
 DOWNLOAD_SUBDIR = "download"
 HISTORY_FILE = "history.db"
 
@@ -37,6 +35,10 @@ class LoginError(RuntimeError):
     pass
 
 
+class WorkspaceError(RuntimeError):
+    pass
+
+
 def schedule_id() -> str:
     return optional_env(SCHEDULE_ID_ENV, DEFAULT_SCHEDULE_ID)
 
@@ -45,18 +47,19 @@ def load() -> config.RpaConfig:
     return config.load(schedule_id())
 
 
-def workspace(settings: config.RpaConfig | None = None) -> Path:
-    configured = (settings.move_path if settings else "") or optional_env(WORKSPACE_ENV)
-    if configured:
-        return resolve_dir(configured)
-    return resolve_dir(str(bundle_dir() / DEFAULT_WORKSPACE))
+def workspace(settings: config.RpaConfig) -> Path:
+    if not settings.move_path.strip():
+        raise WorkspaceError(
+            f"{config.PROCEDURE} 의 file_move_path 가 비어 있어 작업 폴더를 정할 수 없습니다"
+        )
+    return resolve_dir(settings.move_path)
 
 
-def download_dir(settings: config.RpaConfig | None = None) -> Path:
+def download_dir(settings: config.RpaConfig) -> Path:
     return resolve_dir(str(workspace(settings) / DOWNLOAD_SUBDIR))
 
 
-def history_path(settings: config.RpaConfig | None = None) -> Path:
+def history_path(settings: config.RpaConfig) -> Path:
     return workspace(settings) / HISTORY_FILE
 
 
