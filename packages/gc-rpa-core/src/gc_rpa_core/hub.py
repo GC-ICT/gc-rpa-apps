@@ -4,7 +4,7 @@ import asyncio
 import logging
 import threading
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from typing import Any
 
 from pysignalr.client import SignalRClient
@@ -72,8 +72,11 @@ class Session:
 
         assert self.client is not None and self.loop is not None
         logger.debug("허브로 보냅니다 %s%r", method(), tuple(arguments))
-        future = asyncio.run_coroutine_threadsafe(self.client.send(method(), arguments), self.loop)
-        future.result(timeout())
+        try:
+            call = self.client.send(method(), arguments)
+            asyncio.run_coroutine_threadsafe(call, self.loop).result(timeout())
+        except Exception as exc:
+            logger.warning("허브에 보고하지 못했습니다: %s: %s", type(exc).__name__, exc)
 
     def started(self, *, name: str = "") -> None:
         self.send(INFO_LEVEL, STARTED, name=name)
@@ -89,7 +92,7 @@ class Session:
 
 
 class HubHandler(logging.Handler):
-    def __init__(self, session: Session, *, name: str = "", level: int = logging.ERROR) -> None:
+    def __init__(self, session: Session, *, name: str = "", level: int = logging.NOTSET) -> None:
         super().__init__(level)
         self.session = session
         self.system_name = name
@@ -109,7 +112,7 @@ def forwarding(
     session: Session,
     *loggers: logging.Logger,
     name: str = "",
-    level: int = logging.ERROR,
+    level: int = logging.NOTSET,
 ) -> Iterator[HubHandler]:
     handler = HubHandler(session, name=name, level=level)
     for target in loggers:
@@ -139,7 +142,7 @@ async def shutdown() -> None:
 
 
 @contextmanager
-def session(*, seconds: float | None = None) -> Iterator[Session]:
+def connect(*, seconds: float | None = None) -> Iterator[Session]:
     limit = timeout() if seconds is None else seconds
     loop = asyncio.new_event_loop()
     thread = threading.Thread(target=loop.run_forever, daemon=True)
@@ -175,18 +178,15 @@ def session(*, seconds: float | None = None) -> Iterator[Session]:
         loop.close()
 
 
-def send(level: str, message: str, *, name: str = "") -> None:
-    with session() as opened:
-        opened.send(level, message, name=name)
-
-
-def started(*, name: str = "") -> None:
-    send(INFO_LEVEL, STARTED, name=name)
-
-
-def finished(*, message: str, name: str = "") -> None:
-    send(INFO_LEVEL, f"{FINISHED}: {message}", name=name)
-
-
-def failed(*, message: str, name: str = "") -> None:
-    send(ERROR_LEVEL, message, name=name)
+@contextmanager
+def session(*, seconds: float | None = None) -> Iterator[Session]:
+    stack = ExitStack()
+    try:
+        opened = stack.enter_context(connect(seconds=seconds))
+    except Exception as exc:
+        logger.warning("허브 연결에 실패했습니다: %s: %s", type(exc).__name__, exc)
+        opened = Session(None, None)
+    try:
+        yield opened
+    finally:
+        stack.close()

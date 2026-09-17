@@ -122,7 +122,7 @@ def test_progress_sends_info(connected: Any) -> None:
     ]
 
 
-def test_forwarding_relays_errors_only_by_default(connected: Any) -> None:
+def test_forwarding_relays_every_record_by_default(connected: Any) -> None:
     import logging
 
     session, client = connected
@@ -130,21 +130,22 @@ def test_forwarding_relays_errors_only_by_default(connected: Any) -> None:
     logger.setLevel(logging.INFO)
 
     with hub.forwarding(session, logger):
-        logger.info("조용히 넘어갈 줄")
-        logger.error("전달될 줄")
+        logger.info("전달될 줄")
+        logger.error("이것도 전달될 줄")
 
-    assert [arguments[3] for _, arguments in client.sent] == ["전달될 줄"]
+    assert [arguments[3] for _, arguments in client.sent] == ["전달될 줄", "이것도 전달될 줄"]
 
 
-def test_forwarding_level_can_be_widened(connected: Any) -> None:
+def test_forwarding_level_can_be_narrowed(connected: Any) -> None:
     import logging
 
     session, client = connected
-    logger = logging.getLogger("test_forwarding_widened")
+    logger = logging.getLogger("test_forwarding_narrowed")
     logger.setLevel(logging.INFO)
 
-    with hub.forwarding(session, logger, level=logging.INFO):
-        logger.info("전달될 줄")
+    with hub.forwarding(session, logger, level=logging.ERROR):
+        logger.info("조용히 넘어갈 줄")
+        logger.error("전달될 줄")
 
     assert [arguments[3] for _, arguments in client.sent] == ["전달될 줄"]
 
