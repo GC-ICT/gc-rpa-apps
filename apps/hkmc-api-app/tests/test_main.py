@@ -7,6 +7,11 @@ import pytest
 from gc_rpa_core.config import RpaConfig
 from gc_rpa_core.db import DbEndpoint
 from hkmc_api_app import __main__ as entry
+from hkmc_api_app.build_settings import Build
+
+
+def _build(name: str = "hkmc-api-001", schedule_id: str = "4") -> Build:
+    return Build(name=name, schedule_id=schedule_id, indexes=("001", "002"))
 
 
 def _endpoint() -> DbEndpoint:
@@ -57,16 +62,29 @@ def _reporter(sent: dict[str, object]) -> Any:
     return fake
 
 
-def test_schedule_id_defaults_to_four(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_schedule_id_comes_from_the_build(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(entry.SCHEDULE_ID_ENV, raising=False)
 
-    assert entry.schedule_id() == "4"
+    assert entry.schedule_id(_build(schedule_id="6")) == "6"
 
 
 def test_schedule_id_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(entry.SCHEDULE_ID_ENV, "9")
 
-    assert entry.schedule_id() == "9"
+    assert entry.schedule_id(_build(schedule_id="6")) == "9"
+
+
+def test_routines_follow_the_build_indexes() -> None:
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "007", "016"))
+
+    assert [api.index for api in entry.routines(build, "HMC")] == ["001", "016"]
+    assert [api.index for api in entry.routines(build, "KIA")] == ["001", "007"]
+
+
+def test_routines_exclude_write_apis() -> None:
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("009", "010", "011"))
+
+    assert entry.routines(build, "HMC") == ()
 
 
 def test_companies_default_to_both(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -81,6 +99,22 @@ def test_companies_can_be_narrowed(monkeypatch: pytest.MonkeyPatch) -> None:
     assert entry.companies() == ("HMC",)
 
 
+def test_system_name_prefers_the_build_override() -> None:
+    build = Build(
+        name="hkmc-api-002", schedule_id="6", indexes=("012",), signalr_system="HKMC-API-2"
+    )
+
+    assert entry.system_name(build, _settings()) == "HKMC-API-2"
+
+
+def test_system_name_falls_back_to_the_procedure() -> None:
+    assert entry.system_name(_build(), _settings("현대기아 수집")) == "현대기아 수집"
+
+
+def test_system_name_falls_back_to_the_build_name() -> None:
+    assert entry.system_name(_build(), _settings("")) == "hkmc-api-001"
+
+
 def test_describe_handles_empty_exception_message() -> None:
     assert entry.describe(ValueError()) == "ValueError: 상세 메시지가 없습니다"
     assert entry.describe(ValueError("원인")) == "ValueError: 원인"
@@ -88,8 +122,9 @@ def test_describe_handles_empty_exception_message() -> None:
 
 def test_main_reports_success_with_a_summary(monkeypatch: pytest.MonkeyPatch) -> None:
     sent: dict[str, object] = {}
+    monkeypatch.setattr(entry.build_settings, "current", _build)
     monkeypatch.setattr(entry.config, "load", lambda _: _settings())
-    monkeypatch.setattr(entry, "run", lambda _: {"HMC/001": 307, "KIA/001": 142})
+    monkeypatch.setattr(entry, "run", lambda *_, **__: {"HMC/001": 307, "KIA/001": 142})
     monkeypatch.setattr(entry, "reporter", _reporter(sent))
 
     assert entry.main() == 0
@@ -99,8 +134,9 @@ def test_main_reports_success_with_a_summary(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_main_reports_failure_when_an_api_breaks(monkeypatch: pytest.MonkeyPatch) -> None:
     sent: dict[str, object] = {}
+    monkeypatch.setattr(entry.build_settings, "current", _build)
     monkeypatch.setattr(entry.config, "load", lambda _: _settings())
-    monkeypatch.setattr(entry, "run", lambda _: {"HMC/001": 307, "HMC/006": -1})
+    monkeypatch.setattr(entry, "run", lambda *_, **__: {"HMC/001": 307, "HMC/006": -1})
     monkeypatch.setattr(entry, "reporter", _reporter(sent))
 
     assert entry.main() == 1
@@ -114,6 +150,7 @@ def test_main_returns_one_when_schedule_is_missing(monkeypatch: pytest.MonkeyPat
     def boom(_: str) -> RpaConfig:
         raise LookupError("설정이 없습니다")
 
+    monkeypatch.setattr(entry.build_settings, "current", _build)
     monkeypatch.setattr(entry.config, "load", boom)
     monkeypatch.setattr(entry, "reporter", _reporter(sent))
 

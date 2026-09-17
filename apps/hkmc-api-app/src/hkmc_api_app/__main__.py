@@ -8,12 +8,12 @@ from contextlib import contextmanager
 
 from gc_rpa_core import config, hub
 from gc_rpa_core.env import optional_env
-from hkmc_api_app import loader, registry
-from hkmc_api_app.common import Api, message, record_count, session, succeeded
+from hkmc_api_app import build_settings, common, loader, registry
+from hkmc_api_app.build_settings import Build
+from hkmc_api_app.common import Api, Session, message, record_count, succeeded
 
 FALLBACK_SYSTEM = "hkmc-api"
 SCHEDULE_ID_ENV = "HKMC_SCHEDULE_ID"
-DEFAULT_SCHEDULE_ID = "4"
 COMPANIES_ENV = "HKMC_COMPANIES"
 LOG_LEVEL_ENV = "GC_RPA_LOG_LEVEL"
 
@@ -22,8 +22,8 @@ QUIET_LOGGERS = ("pysignalr", "urllib3", "websockets", "asyncio", "httpx", "http
 logger = logging.getLogger(FALLBACK_SYSTEM)
 
 
-def schedule_id() -> str:
-    return optional_env(SCHEDULE_ID_ENV, DEFAULT_SCHEDULE_ID)
+def schedule_id(build: Build) -> str:
+    return optional_env(SCHEDULE_ID_ENV) or build.schedule_id
 
 
 def companies() -> tuple[str, ...]:
@@ -62,12 +62,16 @@ def banner(text: str) -> None:
     print(line, flush=True)
 
 
-def collect(api: Api, company: str, settings: config.RpaConfig) -> int:
-    with session(company) as opened:
-        if registry.sweeps(api):
-            results = api.sweep(opened, plants=registry.plants_for(api, company))
-        else:
-            results = {"": api.fetch(opened)}
+def system_name(build: Build, settings: config.RpaConfig) -> str:
+    return build.signalr_system or settings.name or build.name or FALLBACK_SYSTEM
+
+
+def collect(api: Api, opened: Session, writer: loader.Writer) -> int:
+    company = opened.company
+    if registry.sweeps(api):
+        results = api.sweep(opened, plants=registry.plants_for(api, company))
+    else:
+        results = {"": api.fetch(opened)}
 
     answered = [result for result in results.values() if succeeded(result)]
     if not answered:
@@ -75,28 +79,45 @@ def collect(api: Api, company: str, settings: config.RpaConfig) -> int:
         logger.info("      %s %-28s 건너뜀 (%s)", api.index, api.name, message(first)[:32])
         return 0
 
-    counts = loader.load_rows(
-        api,
-        api.collect_all(results),
-        company=company,
-        endpoint=settings.source,
-    )
+    counts = loader.load_rows(api, api.collect_all(results), company=company, writer=writer)
     total = sum(counts.values())
     received = sum(record_count(result) for result in answered)
     logger.info("      %s %-28s %d행 (응답 %d건)", api.index, api.name, total, received)
     return total
 
 
-def run(settings: config.RpaConfig) -> dict[str, int]:
+def routines(build: Build, company: str) -> tuple[Api, ...]:
+    return registry.for_indexes(build.indexes, company)
+
+
+def run(
+    settings: config.RpaConfig,
+    build: Build,
+    *,
+    report: Callable[[str], None] = lambda _: None,
+) -> dict[str, int]:
     totals: dict[str, int] = {}
-    for position, company in enumerate(companies(), start=1):
-        logger.info("[%d/%d] %s", position + 1, len(companies()) + 1, company)
-        for api in registry.for_company(company):
-            try:
-                totals[f"{company}/{api.index}"] = collect(api, company, settings)
-            except Exception as exc:
-                logger.error("      %s %-28s 실패: %s", api.index, api.name, describe(exc))
-                totals[f"{company}/{api.index}"] = -1
+    steps = len(companies()) + 1
+
+    with common.build_client() as client, loader.writer(settings.source) as writer:
+        for position, company in enumerate(companies(), start=1):
+            logger.info("[%d/%d] %s", position + 1, steps, company)
+            chosen = routines(build, company)
+            if not chosen:
+                logger.info("      수행할 API 가 없습니다")
+                continue
+
+            opened = common.open_session(client, company)
+            for done, api in enumerate(chosen, start=1):
+                try:
+                    rows = collect(api, opened, writer)
+                except Exception as exc:
+                    logger.error("      %s %-28s 실패: %s", api.index, api.name, describe(exc))
+                    totals[f"{company}/{api.index}"] = -1
+                    continue
+                totals[f"{company}/{api.index}"] = rows
+                report(f"{company} {api.index} {api.name} {rows}행 ({done}/{len(chosen)})")
+
     return totals
 
 
@@ -114,18 +135,25 @@ def main() -> int:
 
     with reporter() as hub_session, hub.forwarding(hub_session, logger) as relay:
         try:
-            settings = config.load(schedule_id())
-            name = settings.name or FALLBACK_SYSTEM
+            build = build_settings.current()
+            settings = config.load(schedule_id(build))
+            name = system_name(build, settings)
             relay.system_name = name
             banner(name)
             logger.info(
-                "[1/%d] 설정 조회   %s (schedule_id=%s)",
+                "[1/%d] 설정 조회   %s (build=%s, schedule_id=%s, API %s)",
                 len(companies()) + 1,
                 name,
-                schedule_id(),
+                build.name,
+                schedule_id(build),
+                ", ".join(build.indexes),
             )
             notify(hub_session.started, name=name)
-            totals = run(settings)
+            totals = run(
+                settings,
+                build,
+                report=lambda text: notify(hub_session.progress, message=text, name=name),
+            )
         except Exception as exc:
             logger.error("실패했습니다: %s", describe(exc))
             logger.debug("상세 내역", exc_info=True)

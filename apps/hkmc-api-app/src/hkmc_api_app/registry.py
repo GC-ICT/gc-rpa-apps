@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from hkmc_api_app import api_001_daily_demand as api_001
 from hkmc_api_app import api_002_weekly_demand as api_002
 from hkmc_api_app import api_003_parts_shipment_info as api_003
@@ -45,6 +47,11 @@ READABLE = tuple(api for api in APIS if not api.writes)
 
 def for_company(company: str) -> tuple[Api, ...]:
     return tuple(api for api in READABLE if api.supports(company))
+
+
+def for_indexes(indexes: Iterable[str], company: str) -> tuple[Api, ...]:
+    chosen = set(indexes)
+    return tuple(api for api in for_company(company) if api.index in chosen)
 
 
 SWEEP_PLANTS = {

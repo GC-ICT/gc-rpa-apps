@@ -241,15 +241,19 @@ class Session:
         return request(self.client, self.token, payload)
 
 
+def open_session(client: httpx.Client, company: str) -> Session:
+    return Session(
+        client=client,
+        token=issue_token(client, company),
+        company=company,
+        vendor=vendor(),
+    )
+
+
 @contextmanager
 def session(company: str = "HMC") -> Iterator[Session]:
     with build_client() as client:
-        yield Session(
-            client=client,
-            token=issue_token(client, company),
-            company=company,
-            vendor=vendor(),
-        )
+        yield open_session(client, company)
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,106 @@
+{
+    "builds": {
+        "hkmc-api-001": {
+            "scheduleId": "4",
+            "signalrSystem": ""
+        },
+        "hkmc-api-002": {
+            "scheduleId": "6",
+            "signalrSystem": ""
+        }
+    },
+    "apis": {
+        "001": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-001"
+            }
+        },
+        "002": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-001"
+            }
+        },
+        "003": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-001"
+            }
+        },
+        "004": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-001"
+            }
+        },
+        "005": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-001"
+            }
+        },
+        "006": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-001"
+            }
+        },
+        "007": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-001"
+            }
+        },
+        "008": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-001"
+            }
+        },
+        "009": {
+            "output": {
+                "include": false
+            }
+        },
+        "010": {
+            "output": {
+                "include": false
+            }
+        },
+        "011": {
+            "output": {
+                "include": false
+            }
+        },
+        "012": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-002"
+            }
+        },
+        "013": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-002"
+            }
+        },
+        "014": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-002"
+            }
+        },
+        "015": {
+            "output": {
+                "include": true,
+                "fileName": "hkmc-api-002"
+            }
+        },
+        "016": {
+            "output": {
+                "include": false
+            }
+        }
+    }
+}
