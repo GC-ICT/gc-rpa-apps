@@ -452,7 +452,7 @@ def test_sweep_uses_given_plants(patch_build_client: Callable[[Handler], None]) 
     with common.session("HMC") as opened:
         api_005.API.sweep(opened, plants=("1011", "1014"))
 
-    assert seen == ["1011", "1014"]
+    assert sorted(seen) == ["1011", "1014"]
 
 
 def test_sweep_defaults_to_every_plant_of_the_company(
@@ -472,9 +472,42 @@ def test_sweep_defaults_to_every_plant_of_the_company(
     with common.session("KIA") as opened:
         api_007.API.sweep(opened)
 
-    assert seen == list(common.PLANTS["KIA"])
+    assert sorted(seen) == sorted(common.PLANTS["KIA"])
 
 
 def test_run_rejects_unsupported_company_before_issuing_token() -> None:
     with pytest.raises(ValueError, match="인터페이스가 없습니다"):
         api_007.API.run(company="HMC")
+
+
+def test_sweep_keeps_results_keyed_by_plant(patch_build_client: Callable[[Handler], None]) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == common.TOKEN_PATH:
+            return httpx.Response(200, json={"accToken": TOKEN})
+        indata = json.loads(json.loads(request.content.decode())["INDATA_JSON"])
+        return httpx.Response(
+            200, json={"outData": {"E_IFRESULT": "Z", "E_IFMSG": indata["I_WERKS"]}}
+        )
+
+    patch_build_client(handler)
+
+    with common.session("KIA") as opened:
+        results = api_007.API.sweep(opened)
+
+    assert list(results) == list(common.PLANTS["KIA"])
+    assert all(common.message(result) == werks for werks, result in results.items())
+
+
+def test_sweep_raises_when_a_plant_fails(patch_build_client: Callable[[Handler], None]) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == common.TOKEN_PATH:
+            return httpx.Response(200, json={"accToken": TOKEN})
+        indata = json.loads(json.loads(request.content.decode())["INDATA_JSON"])
+        if indata["I_WERKS"] == "2933":
+            return httpx.Response(500)
+        return httpx.Response(200, json={"outData": {"E_IFRESULT": "Z"}})
+
+    patch_build_client(handler)
+
+    with common.session("KIA") as opened, pytest.raises(httpx.HTTPStatusError):
+        api_007.API.sweep(opened)

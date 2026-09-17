@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date as date_cls
@@ -23,6 +24,7 @@ RECEIVE_PATH = {
 SYSTEM = {"HMC": "MMH", "KIA": "MMK"}
 TARGET_SYSTEM = "ERPMM"
 DEFAULT_TIMEOUT = 30.0
+SWEEP_WORKERS = 8
 SUCCESS_RESULT = "Z"
 
 PLANTS = {
@@ -321,7 +323,11 @@ class Api:
         self, session: Session, *, plants: Iterable[str] | None = None, **params: Any
     ) -> dict[str, Any]:
         codes = PLANTS[session.company] if plants is None else plants
-        return {werks: self.fetch(session, werks=werks, **params) for werks in codes}
+        with ThreadPoolExecutor(max_workers=SWEEP_WORKERS) as pool:
+            calls = {
+                werks: pool.submit(self.fetch, session, werks=werks, **params) for werks in codes
+            }
+        return {werks: call.result() for werks, call in calls.items()}
 
     def collect(self, result: Any) -> dict[str, list[dict[str, Any]]]:
         return rows(result, *self.out_keys)
