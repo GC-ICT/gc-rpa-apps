@@ -4,6 +4,7 @@ import logging
 import sys
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from gc_rpa_core import config, hub
 from gc_rpa_core.env import optional_env
@@ -38,7 +39,17 @@ def system_name(build: Build, settings: config.RpaConfig) -> str:
     return build.signalr_system or settings.name or build.name or FALLBACK_SYSTEM
 
 
-def collect_rows(api: Api, opened: Session, writer: loader.Writer) -> int:
+@dataclass(frozen=True)
+class Outcome:
+    rows: int
+    detail: str
+
+    @property
+    def broken(self) -> bool:
+        return self.rows == FAILED
+
+
+def collect_rows(api: Api, opened: Session, writer: loader.Writer) -> Outcome:
     company = opened.company
     if registry.sweeps(api):
         results = api.sweep(opened, plants=registry.plants_for(api, company))
@@ -49,26 +60,27 @@ def collect_rows(api: Api, opened: Session, writer: loader.Writer) -> int:
     if not answered:
         first = next(iter(results.values()))
         note = " (예상된 오류)" if registry.expected_empty(api, company) else ""
-        logger.info("      %-4s 건너뜀 (%s)%s", company, message(first)[:32], note)
-        return 0
+        return Outcome(0, f"건너뜀 ({message(first)[:32]}){note}")
 
     counts = loader.load_rows(api, api.collect_all(results), company=company, writer=writer)
     total = sum(counts.values())
     received = sum(record_count(result) for result in answered)
-    logger.info("      %-4s %d행 (응답 %d건)", company, total, received)
-    return total
+    return Outcome(total, f"{total}행 (응답 {received}건)")
 
 
-def run_routine(api: Api, opened: Session, writer: loader.Writer) -> int:
+def run_routine(api: Api, opened: Session, writer: loader.Writer) -> Outcome:
     company = opened.company
     try:
-        return collect_rows(api, opened, writer)
+        outcome = collect_rows(api, opened, writer)
     except Exception as exc:
         if registry.expected_empty(api, company):
-            logger.info("      %-4s 실패: %s (예상된 오류)", company, describe_error(exc))
-            return 0
-        logger.error("      %-4s 실패: %s", company, describe_error(exc))
-        return FAILED
+            outcome = Outcome(0, f"실패: {describe_error(exc)} (예상된 오류)")
+        else:
+            outcome = Outcome(FAILED, f"실패: {describe_error(exc)}")
+
+    write_log = logger.warning if outcome.broken else logger.info
+    write_log("      %-4s %s", company, outcome.detail)
+    return outcome
 
 
 def summarize_totals(totals: dict[str, int]) -> tuple[str, list[str]]:
@@ -84,7 +96,7 @@ def run(
     settings: config.RpaConfig,
     build: Build,
     *,
-    report: Callable[[str], None] = lambda _: None,
+    report: Callable[[str, bool], None] = lambda *_: None,
 ) -> dict[str, int]:
     totals: dict[str, int] = {}
     chosen = registry.ordered(build.indexes)
@@ -105,10 +117,12 @@ def run(
             for company, opened in sessions.items():
                 if not api.supports(company):
                     continue
-                rows = run_routine(api, opened, writer)
-                totals[f"{company}/{api.index}"] = rows
-                if rows != FAILED:
-                    report(f"{api.index} {api.name} {company} {rows}행 ({done}/{len(chosen)})")
+                outcome = run_routine(api, opened, writer)
+                totals[f"{company}/{api.index}"] = outcome.rows
+                report(
+                    f"{api.index} {api.name} {company} {outcome.detail} ({done}/{len(chosen)})",
+                    outcome.broken,
+                )
 
     return totals
 
@@ -145,11 +159,14 @@ def main() -> int:
                 ", ".join(api.index for api in planned),
             )
             hub_session.started(name=name)
-            totals = run(
-                settings,
-                build,
-                report=lambda text: hub_session.progress(message=text, name=name),
-            )
+
+            def report_step(text: str, broken: bool) -> None:
+                if broken:
+                    hub_session.failed(message=text, name=name)
+                else:
+                    hub_session.progress(message=text, name=name)
+
+            totals = run(settings, build, report=report_step)
         except Exception as exc:
             logger.error("실패했습니다: %s", describe_error(exc))
             logger.debug("상세 내역", exc_info=True)

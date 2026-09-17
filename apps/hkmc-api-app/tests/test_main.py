@@ -57,6 +57,9 @@ def _reporter(sent: dict[str, object]) -> Any:
         def started(self, **kw: object) -> None:
             sent.setdefault("started", kw)
 
+        def progress(self, **kw: object) -> None:
+            sent.setdefault("progress", kw)
+
         def finished(self, **kw: object) -> None:
             sent["finished"] = kw
 
@@ -113,7 +116,9 @@ def test_run_walks_each_number_across_companies(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(
         entry,
         "collect_rows",
-        lambda api, opened, _writer: visited.append((api.index, opened.company)) or 0,
+        lambda api, opened, _writer: (
+            visited.append((api.index, opened.company)) or entry.Outcome(0, "0행")
+        ),
     )
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "007", "016"))
@@ -137,7 +142,7 @@ def test_run_opens_one_session_per_company(monkeypatch: pytest.MonkeyPatch) -> N
         "open_session",
         lambda _client, company: opened.append(company) or _FakeSession(company),
     )
-    monkeypatch.setattr(entry, "collect_rows", lambda *_: 0)
+    monkeypatch.setattr(entry, "collect_rows", lambda *_: entry.Outcome(0, "0행"))
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "002", "003"))
     entry.run(_settings(), build)
@@ -155,7 +160,7 @@ def test_run_skips_a_company_with_nothing_to_do(monkeypatch: pytest.MonkeyPatch)
         "open_session",
         lambda _client, company: opened.append(company) or _FakeSession(company),
     )
-    monkeypatch.setattr(entry, "collect_rows", lambda *_: 0)
+    monkeypatch.setattr(entry, "collect_rows", lambda *_: entry.Outcome(0, "0행"))
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("016",))
     entry.run(_settings(), build)
@@ -288,6 +293,45 @@ def test_unexpected_failure_is_still_counted(monkeypatch: pytest.MonkeyPatch) ->
     totals = entry.run(_settings(), build)
 
     assert totals == {"HMC/001": -1, "KIA/001": -1}
+
+
+def _reported(indexes: tuple[str, ...]) -> list[tuple[str, bool]]:
+    sent: list[tuple[str, bool]] = []
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=indexes)
+    entry.run(_settings(), build, report=lambda text, broken: sent.append((text, broken)))
+    return sent
+
+
+def test_failures_are_reported_to_the_hub(monkeypatch: pytest.MonkeyPatch) -> None:
+    _no_io(monkeypatch)
+    monkeypatch.setattr(entry, "collect_rows", _always_fails)
+
+    sent = _reported(("001",))
+
+    assert [broken for _, broken in sent] == [True, True]
+    assert all("인터페이스가 응답하지 않습니다" in text for text, _ in sent)
+
+
+def test_expected_failures_are_reported_without_breaking(monkeypatch: pytest.MonkeyPatch) -> None:
+    _no_io(monkeypatch)
+    monkeypatch.setattr(entry, "collect_rows", _always_fails)
+
+    sent = _reported(("006",))
+
+    assert [broken for _, broken in sent] == [False, False]
+    assert all("예상된 오류" in text for text, _ in sent)
+
+
+def test_skipped_companies_are_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    _no_io(monkeypatch)
+    monkeypatch.setattr(
+        entry, "collect_rows", lambda *_: entry.Outcome(0, "건너뜀 (조회 결과 없음)")
+    )
+
+    sent = _reported(("016",))
+
+    assert [broken for _, broken in sent] == [False]
+    assert "건너뜀 (조회 결과 없음)" in sent[0][0]
 
 
 def test_expected_empty_is_per_company(monkeypatch: pytest.MonkeyPatch) -> None:
