@@ -23,7 +23,9 @@ ATTACHMENT_CHECKBOX = "chk_all_box"
 ATTACHMENT_SAVE = "button.l-file__button"
 EXPORT_TOOLBAR = '//button[contains(@onclick,"MailList_btnMsgExport_OnClick")]'
 EXPORT_TOOLBAR_FALLBACK = "button.m-toolbar__button"
-EXPORT_SAVE = '//button[contains(@onclick,"aMultiDownLoad_OnClick")]'
+EXPORT_SAVE = (
+    '//button[contains(@onclick,"aMultiDownLoad_OnClick") and not(contains(@onclick,"MailView_"))]'
+)
 POPUP_OPEN = '//button[contains(@onclick,"MailView_btnPopup_OnClick")]'
 
 POPUP_TIMEOUT = 20.0
@@ -167,9 +169,10 @@ def save_eml(driver: WebDriver, folder: Path, downloads: Path) -> int:
         driver, By.XPATH, EXPORT_SAVE, "EML 내려받기 버튼", timeout=EXPORT_TIMEOUT
     )
     if save is None:
+        logger.warning("      EML 내려받기 버튼을 찾지 못해 원본을 남기지 못합니다")
         inbox.enter_mail_frame(driver)
         inbox.close_export_popup(driver)
-        raise CaptureError("EML 내려받기 버튼을 찾지 못했습니다")
+        return gather_downloads(downloads, folder)
 
     inbox.press(driver, save)
     time.sleep(1.0)
