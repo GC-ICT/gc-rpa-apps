@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 class Step(Enum):
     OPEN = "메일 열기"
-    DISCARD = "광고 삭제"
     FOLDER = "폴더 생성"
     ATTACHMENTS = "첨부 저장"
     EML = "EML 저장"
@@ -39,7 +38,6 @@ class Step(Enum):
 class Outcome(Enum):
     REGISTERED = "등록"
     MOVED = "이동"
-    DISCARDED = "광고 삭제"
 
 
 class StepError(RuntimeError):
@@ -141,11 +139,6 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
     try:
         inbox.open_listing(session.driver, listing)
         logger.info("      %s", listing.label)
-
-        if inbox.advertising(listing.subject):
-            step = Step.DISCARD
-            inbox.delete_selected(session.driver)
-            return Outcome.DISCARDED, ""
 
         step = Step.FOLDER
         folder = make_folder(session, listing)

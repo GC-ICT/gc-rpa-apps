@@ -29,7 +29,6 @@ ALERT_OVERLAY = "alert_overlay"
 EXPORT_POPUP_CLOSE = "divMsgExportPop_px"
 ERP_FOLDER = "ERP 접수함"
 SECURITY_NOTIFY_TYPE = "SECURITYMAIL"
-ADVERTISING_MARKERS = ("Newsletter",)
 
 LIST_ATTRIBUTES = {
     "message_id": "messageid",
@@ -42,7 +41,6 @@ LIST_ATTRIBUTES = {
 }
 
 TOOLBAR_BUTTON = "//button[contains(@onclick,{action!r})]"
-DELETE_ACTION = "MailList_btnDelete_OnClick"
 MOVE_ACTION = "MailList_btnMove_OnClick"
 MOVE_EXPAND_ACTION = "MailList_btnMoveCopySubLayerExpend_OnClick"
 MOVE_APPLY_ACTION = "MailList_btnMoveAction_OnClick"
@@ -121,10 +119,6 @@ def clean_digits(value: str) -> str:
 
 def safe_name(value: str) -> str:
     return re.sub(r'[\\/:*?"<>|]', "_", value).strip()[:60]
-
-
-def advertising(subject: str) -> bool:
-    return any(marker in subject for marker in ADVERTISING_MARKERS)
 
 
 def enter_mail_frame(driver: WebDriver) -> None:
@@ -315,13 +309,6 @@ def listing_at(driver: WebDriver, position: int) -> Listing | None:
 def open_listing(driver: WebDriver, listing: Listing) -> None:
     press(driver, listing.element)
     time.sleep(1.2)
-
-
-def delete_selected(driver: WebDriver) -> None:
-    time.sleep(0.6)
-    press_toolbar(driver, DELETE_ACTION, "삭제 버튼")
-    time.sleep(0.8)
-    enter_mail_frame(driver)
 
 
 def move_selected(driver: WebDriver, folder: str = ERP_FOLDER) -> None:

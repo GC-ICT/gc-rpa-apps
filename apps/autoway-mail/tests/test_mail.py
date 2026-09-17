@@ -74,7 +74,6 @@ def feed(monkeypatch: pytest.MonkeyPatch, listings: list[Listing]) -> FakeInbox:
     monkeypatch.setattr(inbox, "listing_at", fake.at)
     monkeypatch.setattr(inbox, "open_listing", fake.open)
     monkeypatch.setattr(inbox, "retry_move", fake.leave)
-    monkeypatch.setattr(inbox, "delete_selected", fake.leave)
     return fake
 
 
@@ -106,18 +105,6 @@ def test_a_registered_mail_is_only_moved(session: Session, monkeypatch: pytest.M
     session.store.mark_registered("m1", "HR-1")
     feed(monkeypatch, [listing()])
     monkeypatch.setattr(erp, "register", lambda *_a, **_k: pytest.fail("다시 등록하면 안 됩니다"))
-
-    tally = mail.run(session)
-
-    assert tally.done == 1
-    assert tally.failed == 0
-
-
-def test_advertising_is_discarded_without_registering(
-    session: Session, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    feed(monkeypatch, [listing(subject="Newsletter 9월호")])
-    monkeypatch.setattr(erp, "register", lambda *_a, **_k: pytest.fail("광고는 등록하지 않습니다"))
 
     tally = mail.run(session)
 
@@ -307,7 +294,6 @@ def test_summary_mentions_every_bucket() -> None:
 def test_outcomes_read_in_korean() -> None:
     assert Outcome.REGISTERED.value == "등록"
     assert Outcome.MOVED.value == "이동"
-    assert Outcome.DISCARDED.value == "광고 삭제"
 
 
 def test_an_uploaded_folder_is_removed(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:

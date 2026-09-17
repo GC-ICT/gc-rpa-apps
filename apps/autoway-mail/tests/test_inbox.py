@@ -1,7 +1,5 @@
 from typing import Any
 
-import pytest
-
 from autoway_mail import inbox
 from autoway_mail.inbox import Listing
 
@@ -46,15 +44,6 @@ def test_security_mail_is_spotted_by_id_alone() -> None:
 
 def test_an_ordinary_mail_is_not_secured() -> None:
     assert not listing(notify_type="", secure_id="  ").secured
-
-
-@pytest.mark.parametrize("subject", ["Newsletter 9월호", "GC Newsletter"])
-def test_advertising_is_spotted(subject: str) -> None:
-    assert inbox.advertising(subject)
-
-
-def test_an_ordinary_subject_is_not_advertising() -> None:
-    assert not inbox.advertising("9월 정산 자료 요청")
 
 
 def test_clean_text_drops_punctuation() -> None:
