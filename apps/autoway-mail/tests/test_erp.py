@@ -245,3 +245,16 @@ def test_an_empty_subject_falls_back_to_the_folder_name(tmp_path: Path, opened: 
     erp.register(folder_with(tmp_path, "a.pdf"), sender="보낸이", subject="")
 
     assert cursor.statements[0][1][4] == "mail"
+
+
+def test_decomposed_korean_survives_cleaning() -> None:
+    import unicodedata
+
+    decomposed = unicodedata.normalize("NFD", "제작계획 배포.xlsx")
+
+    assert decomposed != "제작계획 배포.xlsx"
+    assert erp.clean_name(decomposed) == "제작계획 배포.xlsx"
+
+
+def test_composed_korean_is_untouched() -> None:
+    assert erp.clean_name("회의록_260917.pptx") == "회의록_260917.pptx"

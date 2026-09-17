@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 import zipfile
 from datetime import date
 from pathlib import Path
@@ -49,7 +50,8 @@ class ErpError(RuntimeError):
 
 
 def clean_name(value: str) -> str:
-    return re.sub(r"[^0-9A-Za-z가-힣\[\]\(\)\{\}\-_.\s]+", "", value).strip()[:NAME_LIMIT]
+    joined = unicodedata.normalize("NFC", value)
+    return re.sub(r"[^0-9A-Za-z가-힣\[\]\(\)\{\}\-_.\s]+", "", joined).strip()[:NAME_LIMIT]
 
 
 def unpack_archives(folder: Path) -> None:
