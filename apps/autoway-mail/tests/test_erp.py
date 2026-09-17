@@ -160,8 +160,23 @@ def test_uploaded_rows_carry_the_mail_no_and_size(tmp_path: Path, opened: Any) -
 
     row = next(params for statement, params in cursor.statements if erp.FILE_TABLE in statement)
     assert row[0] == "HR-9"
-    assert row[2] == b"content"
+    assert row[2] == bytearray(b"content")
     assert row[4] == len(b"content")
+
+
+def test_the_blob_is_a_bytearray_so_pymssql_sends_it_as_binary(tmp_path: Path, opened: Any) -> None:
+    from pymssql import _mssql
+
+    cursor = opened(("OK", "HR-9"))
+    folder = tmp_path / "mail"
+    folder.mkdir()
+    (folder / "plain.txt").write_bytes(b"ascii only")
+
+    erp.register(folder, sender="보낸이", subject="제목")
+
+    row = next(params for statement, params in cursor.statements if erp.FILE_TABLE in statement)
+    assert isinstance(row[2], bytearray)
+    assert b"0x" in _mssql.substitute_params(b"VALUES (%s)", (row[2],))
 
 
 def test_the_file_insert_fills_the_audit_columns_itself(tmp_path: Path, opened: Any) -> None:

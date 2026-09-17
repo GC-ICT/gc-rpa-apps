@@ -6,7 +6,7 @@ import time
 
 from autoway_mail import common, history, inbox, mail
 from gc_rpa_core import hub
-from gc_rpa_core.browser import chrome
+from gc_rpa_core.browser import chrome, clean_up_browsers_on_exit
 from gc_rpa_core.env import optional_env
 from gc_rpa_core.report import describe_error, print_banner
 
@@ -26,6 +26,7 @@ def main() -> int:
     for name in QUIET_LOGGERS:
         logging.getLogger(name).setLevel(logging.WARNING)
 
+    clean_up_browsers_on_exit()
     started = time.monotonic()
     name = FALLBACK_SYSTEM
 

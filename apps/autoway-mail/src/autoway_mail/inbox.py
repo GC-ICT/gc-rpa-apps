@@ -25,6 +25,9 @@ MAIL_FRAMES = ("ifrSubSys", "subsysFrame")
 ROW_NAME = "divItem"
 ROW_CHECKBOX = "input[name='chkMailListSelect']"
 SENDER_NAME = ".m-list__sender-link-name"
+READ_SENDER = ".m-read__from-name"
+READ_DATE = ".m-read__date"
+READ_TITLE = ".m-read__title"
 ALERT_OVERLAY = "alert_overlay"
 EXPORT_POPUP_CLOSE = "divMsgExportPop_px"
 ERP_FOLDER = "ERP 접수함"
@@ -263,6 +266,19 @@ def read_listing(element: WebElement) -> Listing:
     except NoSuchElementException:
         listing.sender_name = ""
     return listing
+
+
+def pane_text(driver: WebDriver, locator: str, what: str) -> str:
+    found = here_or_none(driver, By.CSS_SELECTOR, locator)
+    if found is None:
+        raise InboxError(f"읽기창에서 {what} 를 찾지 못했습니다 ({locator})")
+    return found.text
+
+
+def fill_from_pane(driver: WebDriver, listing: Listing) -> None:
+    listing.sender_name = pane_text(driver, READ_SENDER, "발신자")
+    listing.received_at = pane_text(driver, READ_DATE, "수신일시")
+    listing.subject = pane_text(driver, READ_TITLE, "제목")
 
 
 def read_listings(driver: WebDriver) -> list[Listing]:

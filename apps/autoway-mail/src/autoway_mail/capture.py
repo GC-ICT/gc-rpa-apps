@@ -11,7 +11,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 
 from autoway_mail import inbox
-from gc_rpa_core.browser import RendererHangError, call_cdp
+from gc_rpa_core.browser import PARTIAL_SUFFIXES, RendererHangError, call_cdp, settled_files
 
 ATTACHMENT_CHECKBOX = "chk_all_box"
 ATTACHMENT_SAVE = "button.l-file__button"
@@ -20,21 +20,33 @@ EXPORT_TOOLBAR_FALLBACK = "button.m-toolbar__button"
 EXPORT_SAVE = '//button[contains(@onclick,"aMultiDownLoad_OnClick")]'
 POPUP_OPEN = '//button[contains(@onclick,"MailView_btnPopup_OnClick")]'
 
+DOWNLOAD_START_GRACE = 5.0
+DOWNLOAD_TIMEOUT = 180.0
+
 PDF_NAME = "document.pdf"
 PDF_SETUP_TIMEOUT = 5.0
 PDF_PRINT_TIMEOUT = 20.0
 PDF_PARAMS = {
-    "landscape": True,
     "printBackground": True,
     "preferCSSPageSize": False,
-    "paperWidth": 11.69,
-    "paperHeight": 8.27,
-    "marginTop": 0.2,
-    "marginBottom": 0.2,
-    "marginLeft": 0.2,
-    "marginRight": 0.2,
-    "scale": 0.95,
+    "marginTop": 0.0,
+    "marginBottom": 0.0,
+    "marginLeft": 0.0,
+    "marginRight": 0.0,
+    "scale": 1.0,
 }
+A4_WIDTH = 8.27
+A4_HEIGHT = 11.69
+PIXELS_PER_INCH = 96.0
+PAGE_PADDING = 0.2
+MAX_PAGE_INCHES = 200.0
+
+HIDE_SCROLLBARS = """
+var style = document.createElement('style');
+style.textContent = '::-webkit-scrollbar{display:none !important}'
+  + 'html,body{overflow:visible !important;height:auto !important}';
+document.head.appendChild(style);
+"""
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +55,32 @@ class CaptureError(RuntimeError):
     pass
 
 
+def downloading(downloads: Path) -> bool:
+    return any(path.name.endswith(PARTIAL_SUFFIXES) for path in downloads.iterdir())
+
+
+def wait_for_downloads(downloads: Path) -> None:
+    grace = time.monotonic() + DOWNLOAD_START_GRACE
+    while time.monotonic() < grace:
+        if downloading(downloads) or settled_files(downloads):
+            break
+        time.sleep(0.2)
+
+    deadline = time.monotonic() + DOWNLOAD_TIMEOUT
+    while downloading(downloads):
+        if time.monotonic() >= deadline:
+            partial = [path.name for path in downloads.iterdir() if not path.is_dir()]
+            logger.warning("      %g초 안에 내려받지 못했습니다: %s", DOWNLOAD_TIMEOUT, partial)
+            return
+        time.sleep(0.5)
+
+
 def gather_downloads(downloads: Path, folder: Path) -> int:
+    wait_for_downloads(downloads)
     moved = 0
-    for path in sorted(downloads.iterdir()):
-        if path.is_file():
-            shutil.move(str(path), str(folder / path.name))
-            moved += 1
+    for path in sorted(settled_files(downloads)):
+        shutil.move(str(path), str(folder / path.name))
+        moved += 1
     return moved
 
 
@@ -132,20 +164,43 @@ def focus_popup(driver: WebDriver, main: str) -> None:
     time.sleep(2.0)
 
 
+def content_inches(driver: WebDriver) -> tuple[float, float]:
+    metrics = call_cdp(driver, "Page.getLayoutMetrics", {}, timeout=PDF_SETUP_TIMEOUT)
+    content = metrics.get("cssContentSize") or metrics.get("contentSize") or {}
+    width = float(content.get("width") or 0) / PIXELS_PER_INCH
+    height = float(content.get("height") or 0) / PIXELS_PER_INCH
+    if not width or not height:
+        return A4_WIDTH, A4_HEIGHT
+    if height > MAX_PAGE_INCHES:
+        logger.warning("      본문이 길어 %g인치까지만 담습니다", MAX_PAGE_INCHES)
+        height = MAX_PAGE_INCHES
+    return width + PAGE_PADDING, height + PAGE_PADDING
+
+
+def whole_page(driver: WebDriver) -> dict[str, object]:
+    width, height = content_inches(driver)
+    return {**PDF_PARAMS, "paperWidth": width, "paperHeight": height, "landscape": False}
+
+
 def write_pdf(driver: WebDriver, folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / PDF_NAME
 
     try:
+        driver.execute_script(HIDE_SCROLLBARS)
+    except Exception:
+        logger.debug("      스크롤바 숨기기를 건너뜁니다")
+
+    try:
         call_cdp(
-            driver, "Emulation.setEmulatedMedia", {"media": "print"}, timeout=PDF_SETUP_TIMEOUT
+            driver, "Emulation.setEmulatedMedia", {"media": "screen"}, timeout=PDF_SETUP_TIMEOUT
         )
     except RendererHangError:
         raise
     except Exception:
-        logger.debug("      인쇄 CSS 적용을 건너뜁니다")
+        logger.debug("      화면 CSS 적용을 건너뜁니다")
 
-    result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_PRINT_TIMEOUT)
+    result = call_cdp(driver, "Page.printToPDF", whole_page(driver), timeout=PDF_PRINT_TIMEOUT)
     encoded = result.get("data") or ""
     if not encoded:
         raise CaptureError("Page.printToPDF 가 빈 결과를 돌려주었습니다")
@@ -168,6 +223,7 @@ def save_body_pdf(driver: WebDriver, folder: Path) -> Path:
 
     try:
         focus_popup(driver, main)
+        inbox.dismiss_layer(driver, settle=1.0)
         path = write_pdf(driver, folder)
     except RendererHangError:
         raise

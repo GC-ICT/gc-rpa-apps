@@ -107,7 +107,7 @@ def slotted(folder: Path) -> list[tuple[int, Path]]:
 
 def file_row(document_no: str, slot: int, path: Path) -> tuple[Any, ...]:
     content = path.read_bytes()
-    return (document_no, slot, content, clean_name(path.name), len(content))
+    return (document_no, slot, bytearray(content), clean_name(path.name), len(content))
 
 
 def answered(row: Any) -> tuple[str, str]:

@@ -133,11 +133,26 @@ def recover(session: Session, folder: Path | None) -> None:
     keep_failure(session, folder)
 
 
+def remember(session: Session, listing: inbox.Listing) -> None:
+    if not listing.key:
+        return
+    session.store.remember(
+        listing.key,
+        mid=listing.mid,
+        sender=listing.sender,
+        subject=listing.subject,
+        received_at=listing.received_at,
+    )
+
+
 def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
     folder: Path | None = None
     step = Step.OPEN
     try:
         inbox.open_listing(session.driver, listing)
+        if not listing.readable:
+            inbox.fill_from_pane(session.driver, listing)
+            remember(session, listing)
         logger.info("      %s", listing.label)
 
         step = Step.FOLDER
@@ -184,18 +199,6 @@ def move_registered(session: Session, listing: inbox.Listing) -> None:
     inbox.retry_move(session.driver)
     if listing.key:
         session.store.mark_done(listing.key)
-
-
-def remember(session: Session, listing: inbox.Listing) -> None:
-    if not listing.key:
-        return
-    session.store.remember(
-        listing.key,
-        mid=listing.mid,
-        sender=listing.sender,
-        subject=listing.subject,
-        received_at=listing.received_at,
-    )
 
 
 def note_failure(session: Session, listing: inbox.Listing, step: Step, exc: BaseException) -> None:

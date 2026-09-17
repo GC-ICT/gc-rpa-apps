@@ -1,5 +1,7 @@
 from typing import Any
 
+import pytest
+
 from autoway_mail import inbox
 from autoway_mail.inbox import Listing
 
@@ -130,3 +132,41 @@ def test_read_listing_survives_a_missing_sender_name() -> None:
     element = FakeElement({"messageid": "m1", "sendermail": "a@b.c"})
 
     assert inbox.read_listing(element).sender == "a@b.c"  # type: ignore[arg-type]
+
+
+class FakePane:
+    def __init__(self, texts: dict[str, str]) -> None:
+        self.texts = texts
+
+    def find_element(self, by: str, locator: str) -> Any:
+        from selenium.common.exceptions import NoSuchElementException
+
+        if locator not in self.texts:
+            raise NoSuchElementException(locator)
+        return FakeText(self.texts[locator])
+
+
+def test_the_read_pane_fills_an_unreadable_listing() -> None:
+    driver = FakePane(
+        {
+            inbox.READ_SENDER: "보낸이",
+            inbox.READ_DATE: "2026-09-17 오후 1:25",
+            inbox.READ_TITLE: "[긴급] 정산 자료",
+        }
+    )
+    found = listing()
+
+    assert not found.readable
+    inbox.fill_from_pane(driver, found)  # type: ignore[arg-type]
+
+    assert found.readable
+    assert found.sender == "보낸이"
+    assert inbox.clean_digits(found.received_at) == "20260917125"
+    assert inbox.clean_text(found.subject) == "긴급 정산 자료"
+
+
+def test_a_missing_read_pane_field_is_an_error() -> None:
+    driver = FakePane({inbox.READ_SENDER: "보낸이"})
+
+    with pytest.raises(inbox.InboxError, match="수신일시"):
+        inbox.fill_from_pane(driver, listing())  # type: ignore[arg-type]

@@ -67,6 +67,8 @@ def no_browser(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(capture, "save_attachments", lambda *_a, **_k: 0)
     monkeypatch.setattr(capture, "save_eml", lambda *_a, **_k: 0)
     monkeypatch.setattr(capture, "save_page_images", lambda *_a, **_k: [])
+    monkeypatch.setattr(capture, "DOWNLOAD_START_GRACE", 0.01)
+    monkeypatch.setattr(capture, "DOWNLOAD_TIMEOUT", 0.05)
 
 
 def feed(monkeypatch: pytest.MonkeyPatch, listings: list[Listing]) -> FakeInbox:
@@ -321,3 +323,37 @@ def test_a_folder_that_failed_after_upload_is_not_kept_as_a_failure(
     mail.run(session)
 
     assert not session.failed_dir.exists() or not list(session.failed_dir.iterdir())
+
+
+def test_an_unreadable_listing_is_filled_from_the_read_pane(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bare = Listing(element=object(), message_id="m1")  # type: ignore[arg-type]
+    feed(monkeypatch, [bare])
+    monkeypatch.setattr(capture, "save_body_pdf", writes_pdf(session))
+    monkeypatch.setattr(erp, "register", lambda *_a, **_k: "HR-9")
+
+    def fill(_driver: Any, found: Listing) -> None:
+        found.sender_name = "보낸이"
+        found.received_at = "2026-09-17 13:25"
+        found.subject = "제목"
+
+    monkeypatch.setattr(inbox, "fill_from_pane", fill)
+
+    assert mail.run(session).done == 1
+    found = session.store.find("m1")
+    assert found is not None
+    assert found.subject == "제목"
+
+
+def test_a_readable_listing_never_touches_the_read_pane(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    feed(monkeypatch, [listing()])
+    monkeypatch.setattr(capture, "save_body_pdf", writes_pdf(session))
+    monkeypatch.setattr(erp, "register", lambda *_a, **_k: "HR-9")
+    monkeypatch.setattr(
+        inbox, "fill_from_pane", lambda *_a: pytest.fail("읽기창을 볼 필요가 없습니다")
+    )
+
+    assert mail.run(session).done == 1
