@@ -30,12 +30,6 @@ def test_sender_falls_back_to_the_address() -> None:
     assert listing(sender_mail="a@b.c").sender == "a@b.c"
 
 
-def test_readable_needs_a_subject_or_a_date() -> None:
-    assert not listing().readable
-    assert listing(subject="제목").readable
-    assert listing(received_at="202609170930").readable
-
-
 def test_security_mail_is_spotted_by_notify_type() -> None:
     assert listing(notify_type="securitymail").secured
 
@@ -125,7 +119,7 @@ def test_read_listing_survives_a_row_without_a_checkbox() -> None:
     found = inbox.read_listing(Bare())  # type: ignore[arg-type]
 
     assert found.key == ""
-    assert not found.readable
+    assert found.subject == ""
 
 
 def test_read_listing_survives_a_missing_sender_name() -> None:
@@ -146,27 +140,108 @@ class FakePane:
         return FakeText(self.texts[locator])
 
 
-def test_the_read_pane_fills_an_unreadable_listing() -> None:
-    driver = FakePane(
+def pane(**texts: str) -> Any:
+    return FakePane(
         {
-            inbox.READ_SENDER: "보낸이",
-            inbox.READ_DATE: "2026-09-17 오후 1:25",
-            inbox.READ_TITLE: "[긴급] 정산 자료",
+            inbox.READ_SENDER: texts.get("sender", ""),
+            inbox.READ_DATE: texts.get("date", ""),
+            inbox.READ_TITLE: texts.get("title", ""),
         }
     )
+
+
+def test_the_read_pane_fills_an_empty_listing() -> None:
     found = listing()
 
-    assert not found.readable
-    inbox.fill_from_pane(driver, found)  # type: ignore[arg-type]
-
-    assert found.readable
+    assert inbox.fill_missing(
+        pane(sender="보낸이", date="2026-09-17 오후 1:25", title="[긴급] 정산 자료"), found
+    )
     assert found.sender == "보낸이"
     assert inbox.clean_digits(found.received_at) == "20260917125"
     assert inbox.clean_text(found.subject) == "긴급 정산 자료"
 
 
-def test_a_missing_read_pane_field_is_an_error() -> None:
-    driver = FakePane({inbox.READ_SENDER: "보낸이"})
+def test_the_display_name_replaces_the_address() -> None:
+    found = listing(subject="제목", received_at="202609170930", sender_mail="a@b.c")
 
-    with pytest.raises(inbox.InboxError, match="수신일시"):
-        inbox.fill_from_pane(driver, listing())  # type: ignore[arg-type]
+    assert found.sender == "a@b.c"
+    assert inbox.fill_missing(pane(sender="보낸이"), found)
+    assert found.sender == "보낸이"
+
+
+def test_a_pane_without_a_display_name_keeps_the_address() -> None:
+    found = listing(subject="제목", received_at="202609170930", sender_mail="a@b.c")
+
+    assert not inbox.fill_missing(pane(sender="   "), found)
+    assert found.sender == "a@b.c"
+
+
+def test_a_complete_listing_is_left_alone() -> None:
+    found = listing(subject="제목", received_at="202609170930", sender_name="보낸이")
+
+    assert not inbox.fill_missing(FakePane({}), found)  # type: ignore[arg-type]
+
+
+def test_a_missing_subject_with_no_pane_is_an_error() -> None:
+    with pytest.raises(inbox.InboxError, match="제목"):
+        inbox.fill_missing(FakePane({}), listing())  # type: ignore[arg-type]
+
+
+def test_a_stale_list_is_read_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    from selenium.common.exceptions import StaleElementReferenceException
+
+    monkeypatch.setattr(inbox, "LIST_RETRY_PAUSE", 0)
+    attempts: list[int] = []
+
+    def flaky(_driver: Any, position: int) -> Listing | None:
+        attempts.append(position)
+        if len(attempts) < 3:
+            raise StaleElementReferenceException("stale")
+        return listing(message_id="m1")
+
+    monkeypatch.setattr(inbox, "look_up_listing", flaky)
+
+    found = inbox.listing_at(object(), 0)  # type: ignore[arg-type]
+
+    assert found is not None and found.key == "m1"
+    assert len(attempts) == 3
+
+
+def test_a_list_that_never_settles_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from selenium.common.exceptions import StaleElementReferenceException
+
+    monkeypatch.setattr(inbox, "LIST_RETRY_PAUSE", 0)
+
+    def always(*_a: Any, **_k: Any) -> Listing | None:
+        raise StaleElementReferenceException("stale")
+
+    monkeypatch.setattr(inbox, "look_up_listing", always)
+
+    with pytest.raises(inbox.InboxError, match="5회 읽었으나"):
+        inbox.listing_at(object(), 0)  # type: ignore[arg-type]
+
+
+def test_an_empty_list_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inbox, "LIST_RETRY_PAUSE", 0)
+    calls: list[int] = []
+
+    def empty(_driver: Any, position: int) -> Listing | None:
+        calls.append(position)
+        return None
+
+    monkeypatch.setattr(inbox, "look_up_listing", empty)
+
+    assert inbox.listing_at(object(), 0) is None  # type: ignore[arg-type]
+    assert len(calls) == 1
+
+
+def test_a_dead_session_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inbox, "LIST_RETRY_PAUSE", 0)
+
+    def dead(*_a: Any, **_k: Any) -> Listing | None:
+        raise RuntimeError("invalid session id")
+
+    monkeypatch.setattr(inbox, "look_up_listing", dead)
+
+    with pytest.raises(RuntimeError, match="invalid session id"):
+        inbox.listing_at(object(), 0)  # type: ignore[arg-type]

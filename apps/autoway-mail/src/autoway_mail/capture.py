@@ -11,7 +11,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 
 from autoway_mail import inbox
-from gc_rpa_core.browser import PARTIAL_SUFFIXES, RendererHangError, call_cdp, settled_files
+from gc_rpa_core.browser import (
+    PARTIAL_SUFFIXES,
+    RendererHangError,
+    call_cdp,
+    settled_files,
+    wait_ready,
+)
 
 ATTACHMENT_CHECKBOX = "chk_all_box"
 ATTACHMENT_SAVE = "button.l-file__button"
@@ -19,6 +25,15 @@ EXPORT_TOOLBAR = '//button[contains(@onclick,"MailList_btnMsgExport_OnClick")]'
 EXPORT_TOOLBAR_FALLBACK = "button.m-toolbar__button"
 EXPORT_SAVE = '//button[contains(@onclick,"aMultiDownLoad_OnClick")]'
 POPUP_OPEN = '//button[contains(@onclick,"MailView_btnPopup_OnClick")]'
+
+POPUP_TIMEOUT = 20.0
+POPUP_SETTLE = 0.5
+BODY_TIMEOUT = 15.0
+BODY_MIN_TEXT = 20
+BODY_POLL = 0.5
+
+ATTACHMENT_TIMEOUT = 3.0
+EXPORT_TIMEOUT = 10.0
 
 DOWNLOAD_START_GRACE = 5.0
 DOWNLOAD_TIMEOUT = 180.0
@@ -86,8 +101,11 @@ def gather_downloads(downloads: Path, folder: Path) -> int:
 
 def save_attachments(driver: WebDriver, folder: Path, downloads: Path) -> int:
     time.sleep(1.0)
-    checkbox = inbox.find_anywhere(driver, By.ID, ATTACHMENT_CHECKBOX, "첨부 전체선택").element
+    checkbox = inbox.find_within(
+        driver, By.ID, ATTACHMENT_CHECKBOX, "첨부 전체선택", timeout=ATTACHMENT_TIMEOUT
+    )
     if checkbox is None:
+        logger.info("      첨부 없음")
         inbox.enter_mail_frame(driver)
         return 0
 
@@ -107,7 +125,9 @@ def save_attachments(driver: WebDriver, folder: Path, downloads: Path) -> int:
     inbox.accept_dialog(driver, timeout=1.0)
     inbox.enter_mail_frame(driver)
     inbox.dismiss_layer(driver)
-    return gather_downloads(downloads, folder)
+    saved = gather_downloads(downloads, folder)
+    logger.info("      첨부 %d건", saved)
+    return saved
 
 
 def press_export_toolbar(driver: WebDriver, *, attempts: int = 3) -> None:
@@ -116,7 +136,9 @@ def press_export_toolbar(driver: WebDriver, *, attempts: int = 3) -> None:
         try:
             inbox.accept_dialog(driver, timeout=0)
             inbox.dismiss_layer(driver)
-            button = inbox.find_anywhere(driver, By.XPATH, EXPORT_TOOLBAR, "EML 저장 버튼").element
+            button = inbox.find_within(
+                driver, By.XPATH, EXPORT_TOOLBAR, "EML 저장 버튼", timeout=EXPORT_TIMEOUT
+            )
             if button is None:
                 button = inbox.require_anywhere(
                     driver, By.CSS_SELECTOR, EXPORT_TOOLBAR_FALLBACK, "EML 저장 버튼"
@@ -141,7 +163,9 @@ def save_eml(driver: WebDriver, folder: Path, downloads: Path) -> int:
     inbox.accept_dialog(driver, timeout=1.5)
     time.sleep(0.4)
 
-    save = inbox.find_anywhere(driver, By.XPATH, EXPORT_SAVE, "EML 내려받기 버튼").element
+    save = inbox.find_within(
+        driver, By.XPATH, EXPORT_SAVE, "EML 내려받기 버튼", timeout=EXPORT_TIMEOUT
+    )
     if save is None:
         inbox.enter_mail_frame(driver)
         inbox.close_export_popup(driver)
@@ -153,15 +177,55 @@ def save_eml(driver: WebDriver, folder: Path, downloads: Path) -> int:
     inbox.enter_mail_frame(driver)
     time.sleep(0.4)
     inbox.close_export_popup(driver)
-    return gather_downloads(downloads, folder)
+    saved = gather_downloads(downloads, folder)
+    if not saved:
+        logger.warning("      EML 이 내려오지 않았습니다")
+    else:
+        logger.info("      EML %d건", saved)
+    return saved
 
 
-def focus_popup(driver: WebDriver, main: str) -> None:
-    opened = [handle for handle in driver.window_handles if handle != main]
-    if not opened:
-        raise CaptureError("본문 팝업 창이 열리지 않았습니다")
-    driver.switch_to.window(opened[-1])
-    time.sleep(2.0)
+BODY_LENGTH_SCRIPT = """
+var total = document.body ? document.body.innerText.trim().length : 0;
+var frames = document.querySelectorAll('iframe, frame');
+for (var i = 0; i < frames.length; i++) {
+  try {
+    var inner = frames[i].contentDocument;
+    if (inner && inner.body) { total += inner.body.innerText.trim().length; }
+  } catch (e) {}
+}
+return total;
+"""
+
+
+def body_text_length(driver: WebDriver) -> int:
+    return int(driver.execute_script(BODY_LENGTH_SCRIPT) or 0)
+
+
+def wait_for_body(driver: WebDriver, *, timeout: float = BODY_TIMEOUT) -> None:
+    deadline = time.monotonic() + timeout
+    settled = -1
+    while time.monotonic() < deadline:
+        length = body_text_length(driver)
+        if length >= BODY_MIN_TEXT and length == settled:
+            return
+        settled = length
+        time.sleep(BODY_POLL)
+    logger.warning("      본문이 %g초 안에 자리잡지 않았습니다 (%d자)", timeout, settled)
+
+
+def focus_popup(driver: WebDriver, before: set[str], *, timeout: float = POPUP_TIMEOUT) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        opened = [handle for handle in driver.window_handles if handle not in before]
+        if opened:
+            driver.switch_to.window(opened[-1])
+            wait_ready(driver, timeout=timeout)
+            wait_for_body(driver)
+            time.sleep(POPUP_SETTLE)
+            return
+        time.sleep(0.2)
+    raise CaptureError(f"본문 팝업 창이 {timeout:g}초 안에 열리지 않았습니다")
 
 
 def content_inches(driver: WebDriver) -> tuple[float, float]:
@@ -217,12 +281,17 @@ def save_body_pdf(driver: WebDriver, folder: Path) -> Path:
     inbox.enter_mail_frame(driver)
     time.sleep(0.4)
 
-    opener = inbox.require_anywhere(driver, By.XPATH, POPUP_OPEN, "본문 팝업 버튼")
+    opener = inbox.find_within(
+        driver, By.XPATH, POPUP_OPEN, "본문 팝업 버튼", timeout=EXPORT_TIMEOUT
+    )
+    if opener is None:
+        raise CaptureError("본문 팝업 버튼을 찾지 못했습니다")
+
+    before = set(driver.window_handles)
     inbox.press(driver, opener)
-    time.sleep(3.0)
 
     try:
-        focus_popup(driver, main)
+        focus_popup(driver, before)
         inbox.dismiss_layer(driver, settle=1.0)
         path = write_pdf(driver, folder)
     except RendererHangError:

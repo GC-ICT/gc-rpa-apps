@@ -64,6 +64,7 @@ class FakeInbox:
 def no_browser(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in ("enter_mail_frame", "settle", "windows_closed_to"):
         monkeypatch.setattr(inbox, name, lambda *_a, **_k: None)
+    monkeypatch.setattr(inbox, "fill_missing", lambda *_a: False)
     monkeypatch.setattr(capture, "save_attachments", lambda *_a, **_k: 0)
     monkeypatch.setattr(capture, "save_eml", lambda *_a, **_k: 0)
     monkeypatch.setattr(capture, "save_page_images", lambda *_a, **_k: [])
@@ -338,7 +339,7 @@ def test_an_unreadable_listing_is_filled_from_the_read_pane(
         found.received_at = "2026-09-17 13:25"
         found.subject = "제목"
 
-    monkeypatch.setattr(inbox, "fill_from_pane", fill)
+    monkeypatch.setattr(inbox, "fill_missing", lambda d, f: bool(fill(d, f)) or True)
 
     assert mail.run(session).done == 1
     found = session.store.find("m1")
@@ -352,8 +353,6 @@ def test_a_readable_listing_never_touches_the_read_pane(
     feed(monkeypatch, [listing()])
     monkeypatch.setattr(capture, "save_body_pdf", writes_pdf(session))
     monkeypatch.setattr(erp, "register", lambda *_a, **_k: "HR-9")
-    monkeypatch.setattr(
-        inbox, "fill_from_pane", lambda *_a: pytest.fail("읽기창을 볼 필요가 없습니다")
-    )
+    monkeypatch.setattr(inbox, "fill_missing", lambda *_a: False)
 
     assert mail.run(session).done == 1

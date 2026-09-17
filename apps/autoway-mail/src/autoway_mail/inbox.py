@@ -60,6 +60,10 @@ CONFIRM_BUTTONS = (
 LAYER_SETTLE_SECONDS = 3.0
 SCROLL_SETTLE_SECONDS = 5.0
 SCROLL_LIMIT = 20
+LIST_ATTEMPTS = 5
+LIST_RETRY_PAUSE = 1.0
+READ_PANE_TIMEOUT = 10.0
+MODULE_TIMEOUT = 20.0
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +95,6 @@ class Listing:
     @property
     def label(self) -> str:
         return f"[{self.sender}] {self.subject}"
-
-    @property
-    def readable(self) -> bool:
-        return bool(self.subject or self.received_at)
 
     @property
     def secured(self) -> bool:
@@ -163,6 +163,17 @@ def find_anywhere(driver: WebDriver, by: str, locator: str, what: str) -> FrameS
 
     enter_mail_frame(driver)
     return FrameSearch(None, searched)
+
+
+def find_within(
+    driver: WebDriver, by: str, locator: str, what: str, *, timeout: float
+) -> WebElement | None:
+    deadline = time.monotonic() + timeout
+    while True:
+        found = find_anywhere(driver, by, locator, what).element
+        if found is not None or time.monotonic() >= deadline:
+            return found
+        time.sleep(0.3)
 
 
 def require_anywhere(driver: WebDriver, by: str, locator: str, what: str) -> WebElement:
@@ -245,11 +256,19 @@ def close_export_popup(driver: WebDriver) -> bool:
     return True
 
 
+def waited_for(driver: WebDriver, by: str, locator: str, *, timeout: float) -> bool:
+    try:
+        WebDriverWait(driver, timeout).until(ec.presence_of_element_located((by, locator)))
+        return True
+    except TimeoutException:
+        return False
+
+
 def open_module(driver: WebDriver) -> None:
     driver.find_element(By.CSS_SELECTOR, MAIL_MODULE_LINK).click()
-    time.sleep(2.0)
     enter_mail_frame(driver)
-    time.sleep(0.6)
+    if not waited_for(driver, By.NAME, ROW_NAME, timeout=MODULE_TIMEOUT):
+        logger.warning("      받은편지함 목록이 %g초 안에 그려지지 않았습니다", MODULE_TIMEOUT)
 
 
 def read_listing(element: WebElement) -> Listing:
@@ -275,10 +294,21 @@ def pane_text(driver: WebDriver, locator: str, what: str) -> str:
     return found.text
 
 
-def fill_from_pane(driver: WebDriver, listing: Listing) -> None:
-    listing.sender_name = pane_text(driver, READ_SENDER, "발신자")
-    listing.received_at = pane_text(driver, READ_DATE, "수신일시")
-    listing.subject = pane_text(driver, READ_TITLE, "제목")
+def fill_missing(driver: WebDriver, listing: Listing) -> bool:
+    filled = False
+    if not listing.subject:
+        listing.subject = pane_text(driver, READ_TITLE, "제목")
+        filled = True
+    if not listing.received_at:
+        listing.received_at = pane_text(driver, READ_DATE, "수신일시")
+        filled = True
+
+    shown = here_or_none(driver, By.CSS_SELECTOR, READ_SENDER)
+    name = shown.text.strip() if shown is not None else ""
+    if name and name != listing.sender_name:
+        listing.sender_name = name
+        filled = True
+    return filled
 
 
 def read_listings(driver: WebDriver) -> list[Listing]:
@@ -301,7 +331,7 @@ def load_more(driver: WebDriver, seen: int) -> int:
     return seen
 
 
-def listing_at(driver: WebDriver, position: int) -> Listing | None:
+def look_up_listing(driver: WebDriver, position: int) -> Listing | None:
     accept_dialog(driver, timeout=0)
     enter_mail_frame(driver)
     try:
@@ -322,9 +352,30 @@ def listing_at(driver: WebDriver, position: int) -> Listing | None:
     return None
 
 
+def listing_at(
+    driver: WebDriver, position: int, *, attempts: int = LIST_ATTEMPTS
+) -> Listing | None:
+    last: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return look_up_listing(driver, position)
+        except StaleElementReferenceException as exc:
+            last = exc
+            logger.warning("      목록이 갱신 중이라 다시 읽습니다 %d/%d", attempt, attempts)
+        except Exception as exc:
+            if session_dead(exc):
+                raise
+            last = exc
+            logger.warning("      목록 조회 실패 → 재시도 %d/%d: %s", attempt, attempts, exc)
+        time.sleep(LIST_RETRY_PAUSE)
+
+    raise InboxError(f"목록 {position}번 행을 {attempts}회 읽었으나 실패했습니다: {last}")
+
+
 def open_listing(driver: WebDriver, listing: Listing) -> None:
     press(driver, listing.element)
-    time.sleep(1.2)
+    if not waited_for(driver, By.CSS_SELECTOR, READ_TITLE, timeout=READ_PANE_TIMEOUT):
+        logger.warning("      읽기창이 %g초 안에 그려지지 않았습니다", READ_PANE_TIMEOUT)
 
 
 def move_selected(driver: WebDriver, folder: str = ERP_FOLDER) -> None:

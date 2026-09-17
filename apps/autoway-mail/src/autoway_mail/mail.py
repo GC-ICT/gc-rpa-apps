@@ -150,8 +150,7 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
     step = Step.OPEN
     try:
         inbox.open_listing(session.driver, listing)
-        if not listing.readable:
-            inbox.fill_from_pane(session.driver, listing)
+        if inbox.fill_missing(session.driver, listing):
             remember(session, listing)
         logger.info("      %s", listing.label)
 
