@@ -1,13 +1,14 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import pytest
 
-from gc_rpa_core.config import RpaConfig
+from gc_rpa_core.config import RpaConfig, RpaDatabase
 from gc_rpa_core.db import DbEndpoint
 from hkmc_api_app import __main__ as entry
+from hkmc_api_app import loader
 from hkmc_api_app.build_settings import Build
 
 
@@ -35,6 +36,35 @@ def _endpoint() -> DbEndpoint:
     )
 
 
+def _blank() -> DbEndpoint:
+    return DbEndpoint("", None, "", "", "")
+
+
+def _database(name: str = "test_db", host: str = "test-source.invalid") -> RpaDatabase:
+    return RpaDatabase(
+        name=name,
+        source=DbEndpoint(
+            host=host,
+            port=1801,
+            database="test_source_db",
+            user="test_source_user",
+            password="test_source_pw",
+        ),
+        target=_blank(),
+        tables=("Z_API_001_TEMP",),
+        queries=("EXEC Z_API_001_PROC",),
+    )
+
+
+def _databases() -> tuple[RpaDatabase, ...]:
+    return (_database(),)
+
+
+@contextmanager
+def _fake_writers(*_: object, **__: object) -> Iterator[tuple[object, ...]]:
+    yield ()
+
+
 def _settings(name: str = "테스트 수집") -> RpaConfig:
     return RpaConfig(
         name=name,
@@ -46,7 +76,8 @@ def _settings(name: str = "테스트 수집") -> RpaConfig:
         move_path="",
         exe_name="test_app.exe",
         source=_endpoint(),
-        target=DbEndpoint("", None, "", "", ""),
+        target=_blank(),
+        actprg_id="3",
     )
 
 
@@ -109,20 +140,20 @@ def test_run_walks_each_number_across_companies(monkeypatch: pytest.MonkeyPatch)
     visited: list[tuple[str, str]] = []
 
     monkeypatch.setattr(entry.common, "build_client", _nothing)
-    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: _nothing())
+    monkeypatch.setattr(entry.loader, "writers", _fake_writers)
     monkeypatch.setattr(
         entry.common, "open_session", lambda _client, company: _FakeSession(company)
     )
     monkeypatch.setattr(
         entry,
         "collect_rows",
-        lambda api, opened, _writer: (
+        lambda api, opened, _targets: (
             visited.append((api.index, opened.company)) or entry.Outcome(0, "0행")
         ),
     )
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "007", "016"))
-    entry.run(_settings(), build)
+    entry.run(build, _databases())
 
     assert visited == [
         ("001", "HMC"),
@@ -136,7 +167,7 @@ def test_run_opens_one_session_per_company(monkeypatch: pytest.MonkeyPatch) -> N
     opened: list[str] = []
 
     monkeypatch.setattr(entry.common, "build_client", _nothing)
-    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: _nothing())
+    monkeypatch.setattr(entry.loader, "writers", _fake_writers)
     monkeypatch.setattr(
         entry.common,
         "open_session",
@@ -145,7 +176,7 @@ def test_run_opens_one_session_per_company(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(entry, "collect_rows", lambda *_: entry.Outcome(0, "0행"))
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001", "002", "003"))
-    entry.run(_settings(), build)
+    entry.run(build, _databases())
 
     assert opened == ["HMC", "KIA"]
 
@@ -154,7 +185,7 @@ def test_run_skips_a_company_with_nothing_to_do(monkeypatch: pytest.MonkeyPatch)
     opened: list[str] = []
 
     monkeypatch.setattr(entry.common, "build_client", _nothing)
-    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: _nothing())
+    monkeypatch.setattr(entry.loader, "writers", _fake_writers)
     monkeypatch.setattr(
         entry.common,
         "open_session",
@@ -163,7 +194,7 @@ def test_run_skips_a_company_with_nothing_to_do(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(entry, "collect_rows", lambda *_: entry.Outcome(0, "0행"))
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("016",))
-    entry.run(_settings(), build)
+    entry.run(build, _databases())
 
     assert opened == ["HMC"]
 
@@ -200,6 +231,7 @@ def test_main_reports_success_with_a_summary(monkeypatch: pytest.MonkeyPatch) ->
     sent: dict[str, object] = {}
     monkeypatch.setattr(entry.build_settings, "current", _build)
     monkeypatch.setattr(entry.config, "load", lambda _: _settings())
+    monkeypatch.setattr(entry.config, "load_databases", lambda _: _databases())
     monkeypatch.setattr(entry, "run", lambda *_, **__: {"HMC/001": 307, "KIA/001": 142})
     monkeypatch.setattr(entry.hub, "session", _reporter(sent))
 
@@ -212,6 +244,7 @@ def test_main_reports_failure_when_an_api_breaks(monkeypatch: pytest.MonkeyPatch
     sent: dict[str, object] = {}
     monkeypatch.setattr(entry.build_settings, "current", _build)
     monkeypatch.setattr(entry.config, "load", lambda _: _settings())
+    monkeypatch.setattr(entry.config, "load_databases", lambda _: _databases())
     monkeypatch.setattr(entry, "run", lambda *_, **__: {"HMC/001": 307, "HMC/006": -1})
     monkeypatch.setattr(entry.hub, "session", _reporter(sent))
 
@@ -256,7 +289,7 @@ def test_007_sweeps_every_plant_of_the_company() -> None:
 
 def _no_io(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(entry.common, "build_client", _nothing)
-    monkeypatch.setattr(entry.loader, "writer", lambda *_, **__: _nothing())
+    monkeypatch.setattr(entry.loader, "writers", _fake_writers)
     monkeypatch.setattr(
         entry.common, "open_session", lambda _client, company: _FakeSession(company)
     )
@@ -274,7 +307,7 @@ def test_expected_failure_is_not_counted_as_a_failure(
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("006",))
     with caplog.at_level("INFO", logger=entry.FALLBACK_SYSTEM):
-        totals = entry.run(_settings(), build)
+        totals = entry.run(build, _databases())
 
     assert totals == {"HMC/006": 0, "KIA/006": 0}
     assert all(record.levelname == "INFO" for record in caplog.records)
@@ -290,7 +323,7 @@ def test_unexpected_failure_is_still_counted(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(entry, "collect_rows", _always_fails)
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001",))
-    totals = entry.run(_settings(), build)
+    totals = entry.run(build, _databases())
 
     assert totals == {"HMC/001": -1, "KIA/001": -1}
 
@@ -298,7 +331,7 @@ def test_unexpected_failure_is_still_counted(monkeypatch: pytest.MonkeyPatch) ->
 def _reported(indexes: tuple[str, ...]) -> list[tuple[str, bool]]:
     sent: list[tuple[str, bool]] = []
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=indexes)
-    entry.run(_settings(), build, report=lambda text, broken: sent.append((text, broken)))
+    entry.run(build, _databases(), report=lambda text, broken: sent.append((text, broken)))
     return sent
 
 
@@ -339,6 +372,139 @@ def test_expected_empty_is_per_company(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(entry, "collect_rows", _always_fails)
 
     build = Build(name="hkmc-api-001", schedule_id="4", indexes=("005",))
-    totals = entry.run(_settings(), build)
+    totals = entry.run(build, _databases())
 
     assert totals == {"HMC/005": 0, "KIA/005": -1}
+
+
+def test_checked_databases_keeps_every_row_that_is_filled_in() -> None:
+    chosen = entry.checked_databases((_database("db-a"), _database("db-b")))
+
+    assert [database.name for database in chosen] == ["db-a", "db-b"]
+
+
+def test_checked_databases_rejects_an_empty_endpoint() -> None:
+    empty = RpaDatabase(
+        name="비어있는DB",
+        source=_blank(),
+        target=_blank(),
+        tables=("Z_API_001_TEMP",),
+        queries=("EXEC A_PROC",),
+    )
+
+    with pytest.raises(LookupError, match="접속정보"):
+        entry.checked_databases((_database(), empty))
+
+
+def test_checked_databases_rejects_a_missing_temp_table() -> None:
+    database = replace(_database("db-a"), tables=())
+
+    with pytest.raises(LookupError, match="temp_table"):
+        entry.checked_databases((database,))
+
+
+def test_checked_databases_rejects_a_missing_act_query() -> None:
+    database = replace(_database("db-a"), queries=())
+
+    with pytest.raises(LookupError, match="act_query"):
+        entry.checked_databases((database,))
+
+
+def test_run_opens_every_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[list[tuple[str, str]]] = []
+
+    @contextmanager
+    def capture(databases: list[RpaDatabase]) -> Iterator[tuple[object, ...]]:
+        seen.append([(database.name, database.source.host) for database in databases])
+        yield ()
+
+    monkeypatch.setattr(entry.common, "build_client", _nothing)
+    monkeypatch.setattr(entry.loader, "writers", capture)
+    monkeypatch.setattr(
+        entry.common, "open_session", lambda _client, company: _FakeSession(company)
+    )
+    monkeypatch.setattr(entry, "collect_rows", lambda *_: entry.Outcome(0, "0행"))
+
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001",))
+    entry.run(build, (_database("db-a", "host-a"), _database("db-b", "host-b")))
+
+    assert seen == [[("db-a", "host-a"), ("db-b", "host-b")]]
+
+
+def test_main_uses_the_databases_from_the_procedure(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: dict[str, object] = {}
+    asked: list[str] = []
+    monkeypatch.setattr(entry.build_settings, "current", _build)
+    monkeypatch.setattr(entry.config, "load", lambda _: _settings())
+    monkeypatch.setattr(
+        entry.config,
+        "load_databases",
+        lambda actprg_id: asked.append(actprg_id) or (_database("db-a"), _database("db-b")),
+    )
+    monkeypatch.setattr(entry, "run", lambda *_, **__: {"HMC/001": 1})
+    monkeypatch.setattr(entry.hub, "session", _reporter(sent))
+
+    assert entry.main() == 0
+    assert asked == ["3"]
+
+
+def test_run_finishes_with_the_queries_of_each_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    ran: list[str] = []
+
+    @contextmanager
+    def two_writers(_databases: object) -> Iterator[tuple[object, ...]]:
+        yield (
+            loader.Writer(rows=None, procedures=None, name="db-a", queries=("EXEC A",)),
+            loader.Writer(rows=None, procedures=None, name="db-b", queries=("EXEC B",)),
+        )
+
+    monkeypatch.setattr(entry.common, "build_client", _nothing)
+    monkeypatch.setattr(entry.loader, "writers", two_writers)
+    monkeypatch.setattr(
+        entry.common, "open_session", lambda _client, company: _FakeSession(company)
+    )
+    monkeypatch.setattr(entry, "collect_rows", lambda *_: entry.Outcome(0, "0행"))
+    monkeypatch.setattr(
+        entry.loader, "run_queries", lambda writer, _run_dt: ran.append(writer.name) or 1
+    )
+
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001",))
+    totals = entry.run(build, _databases())
+
+    assert ran == ["db-a", "db-b"]
+    assert totals["db-a/쿼리"] == 0
+    assert totals["db-b/쿼리"] == 0
+
+
+def test_a_failing_query_does_not_stop_the_other_databases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ran: list[str] = []
+
+    @contextmanager
+    def two_writers(_databases: object) -> Iterator[tuple[object, ...]]:
+        yield (
+            loader.Writer(rows=None, procedures=None, name="db-a", queries=("EXEC A",)),
+            loader.Writer(rows=None, procedures=None, name="db-b", queries=("EXEC B",)),
+        )
+
+    def run_queries(writer: loader.Writer, _run_dt: object) -> int:
+        ran.append(writer.name)
+        if writer.name == "db-a":
+            raise loader.DatabaseError("db-a 1번째 쿼리 실행에 실패했습니다")
+        return 1
+
+    monkeypatch.setattr(entry.common, "build_client", _nothing)
+    monkeypatch.setattr(entry.loader, "writers", two_writers)
+    monkeypatch.setattr(
+        entry.common, "open_session", lambda _client, company: _FakeSession(company)
+    )
+    monkeypatch.setattr(entry, "collect_rows", lambda *_: entry.Outcome(0, "0행"))
+    monkeypatch.setattr(entry.loader, "run_queries", run_queries)
+
+    build = Build(name="hkmc-api-001", schedule_id="4", indexes=("001",))
+    totals = entry.run(build, _databases())
+
+    assert ran == ["db-a", "db-b"]
+    assert totals["db-a/쿼리"] == entry.FAILED
+    assert totals["db-b/쿼리"] == 0

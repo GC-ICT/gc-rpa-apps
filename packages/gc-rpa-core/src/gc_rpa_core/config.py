@@ -7,13 +7,21 @@ from gc_rpa_core.db import DbEndpoint, cursor
 
 PROCEDURE = "ITM250_Schedule"
 SELECT_TYPE = "GetActProgram"
+DATABASE_SELECT_TYPE = "GetActDatabase"
 CALL = f"EXEC {PROCEDURE} @_Select_type = %s, @_schedule_id = %s"
+DATABASE_CALL = f"EXEC {PROCEDURE} @_Select_type = %s, @_actprg_id = %s"
 
 TRUE_FLAGS = ("Y", "1", "T", "TRUE")
+TABLE_SEPARATOR = ","
+QUERY_SEPARATOR = ";"
 
 
 def flag(value: str) -> bool:
     return value.strip().upper() in TRUE_FLAGS
+
+
+def items(value: str, separator: str) -> tuple[str, ...]:
+    return tuple(part.strip() for part in value.split(separator) if part.strip())
 
 
 def text(row: dict[str, Any], column: str) -> str:
@@ -48,6 +56,16 @@ class RpaConfig:
     exe_name: str
     source: DbEndpoint
     target: DbEndpoint
+    actprg_id: str = ""
+
+
+@dataclass(frozen=True)
+class RpaDatabase:
+    name: str
+    source: DbEndpoint
+    target: DbEndpoint
+    tables: tuple[str, ...] = ()
+    queries: tuple[str, ...] = ()
 
 
 def load(schedule_id: str) -> RpaConfig:
@@ -69,4 +87,25 @@ def load(schedule_id: str) -> RpaConfig:
         exe_name=text(row, "file_nm"),
         source=endpoint(row, "source"),
         target=endpoint(row, "target"),
+        actprg_id=text(row, "actprg_id"),
+    )
+
+
+def load_databases(actprg_id: str) -> tuple[RpaDatabase, ...]:
+    with cursor() as opened:
+        opened.execute(DATABASE_CALL, (DATABASE_SELECT_TYPE, actprg_id))
+        rows = opened.fetchall()
+
+    if not rows:
+        raise LookupError(f"{PROCEDURE} 에 actprg_id={actprg_id!r} 의 DB 설정이 없습니다")
+
+    return tuple(
+        RpaDatabase(
+            name=text(row, "source_db") or text(row, "source_db_nm"),
+            source=endpoint(row, "source"),
+            target=endpoint(row, "target"),
+            tables=items(text(row, "temp_table"), TABLE_SEPARATOR),
+            queries=items(text(row, "act_query"), QUERY_SEPARATOR),
+        )
+        for row in rows
     )

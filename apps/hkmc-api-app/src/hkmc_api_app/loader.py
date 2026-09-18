@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterator
-from contextlib import contextmanager
-from dataclasses import dataclass
+import re
+from collections.abc import Iterator, Sequence
+from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from gc_rpa_core.config import RpaDatabase
 from gc_rpa_core.db import DbEndpoint, connect
 from hkmc_api_app.common import Api, outdata, succeeded
 
@@ -17,6 +19,10 @@ KST = timezone(timedelta(hours=9))
 
 SPMON_COLUMN = "I_SPMON"
 SPMON_INDEXES = ("014", "015")
+
+RUN_DT = "{run_dt}"
+TABLE_PATTERN = re.compile(r"Z_API_(\d{3})(\d?)_TEMP", re.IGNORECASE)
+NAME_PATTERN = re.compile(r"^[\w.\[\]]+$")
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +39,9 @@ class DatabaseError(RuntimeError):
 class Writer:
     rows: Any
     procedures: Any
+    name: str = ""
+    tables: dict[str, str] = field(default_factory=dict)
+    queries: tuple[str, ...] = ()
 
     @contextmanager
     def rows_cursor(self) -> Iterator[Any]:
@@ -56,17 +65,73 @@ class Writer:
             opened.close()
 
 
+def label(endpoint: DbEndpoint) -> str:
+    return f"{endpoint.host}/{endpoint.database}" if endpoint.host else endpoint.database
+
+
+def qualified(name: str, database: str = DATABASE) -> str:
+    parts = [part.strip().strip("[]") for part in name.split(".") if part.strip()]
+    if len(parts) >= 3:
+        return "[{}].[{}].[{}]".format(*parts[-3:])
+    if len(parts) == 2:
+        return f"[{database or DATABASE}].[{parts[0]}].[{parts[1]}]"
+    return f"[{database or DATABASE}].[{SCHEMA}].[{parts[0]}]"
+
+
+def table_key(name: str) -> str:
+    found = TABLE_PATTERN.search(name)
+    return f"{found.group(1)}{found.group(2)}" if found else ""
+
+
+def tables_of(database: RpaDatabase) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for name in database.tables:
+        key = table_key(name)
+        if not key:
+            logger.warning("      %s 의 %s 은 API 번호를 읽을 수 없습니다", database.name, name)
+            continue
+        found[key] = qualified(name, database.source.database)
+    return found
+
+
+def statements_of(database: RpaDatabase) -> tuple[str, ...]:
+    built = []
+    for query in database.queries:
+        if NAME_PATTERN.match(query):
+            built.append(f"EXEC {qualified(query, database.source.database)} @run_dt = {RUN_DT}")
+        else:
+            built.append(query)
+    return tuple(built)
+
+
 @contextmanager
-def writer(endpoint: DbEndpoint | None = None) -> Iterator[Writer]:
+def writer(database: RpaDatabase) -> Iterator[Writer]:
     with (
-        connect(endpoint, autocommit=False) as rows,
-        connect(endpoint, autocommit=True) as procedures,
+        connect(database.source, autocommit=False) as rows,
+        connect(database.source, autocommit=True) as procedures,
     ):
-        yield Writer(rows=rows, procedures=procedures)
+        yield Writer(
+            rows=rows,
+            procedures=procedures,
+            name=database.name or label(database.source),
+            tables=tables_of(database),
+            queries=statements_of(database),
+        )
 
 
-def qualified(name: str) -> str:
-    return f"[{DATABASE}].[{SCHEMA}].[{name}]"
+@contextmanager
+def writers(databases: Sequence[RpaDatabase]) -> Iterator[tuple[Writer, ...]]:
+    with ExitStack() as stack:
+        opened = []
+        for database in databases:
+            try:
+                opened.append(stack.enter_context(writer(database)))
+            except Exception as exc:
+                shown = database.name or label(database.source)
+                logger.warning("      %s 에 붙지 못해 건너뜁니다: %s", shown, exc)
+        if not opened:
+            raise DatabaseError("데이터를 쓸 수 있는 DB 가 없습니다")
+        yield tuple(opened)
 
 
 def ordinals(api: Api) -> tuple[str, ...]:
@@ -75,12 +140,8 @@ def ordinals(api: Api) -> tuple[str, ...]:
     return tuple(str(position) for position, _ in enumerate(api.out_keys, start=1))
 
 
-def temp_table(index: str, ordinal: str = "") -> str:
-    return f"Z_API_{index}{ordinal}_TEMP"
-
-
-def procedure(index: str, ordinal: str = "") -> str:
-    return f"Z_API_{index}{ordinal}_PROC"
+def keys(api: Api) -> tuple[str, ...]:
+    return tuple(f"{api.index}{ordinal}" for ordinal in ordinals(api))
 
 
 def collected_at() -> datetime:
@@ -105,7 +166,7 @@ def insert_statement(table: str, *, spmon: bool) -> str:
     if spmon:
         columns.append(SPMON_COLUMN)
     placeholders = ", ".join(["%s"] * len(columns))
-    return f"INSERT INTO {qualified(table)}\n  ({', '.join(columns)})\nVALUES ({placeholders})"
+    return f"INSERT INTO {table}\n  ({', '.join(columns)})\nVALUES ({placeholders})"
 
 
 def parameters(
@@ -129,15 +190,50 @@ def uses_spmon(api: Api) -> bool:
     return api.index in SPMON_INDEXES
 
 
+def tag(writer: Writer, message: str) -> str:
+    return f"{writer.name} {message}" if writer.name else message
+
+
 def load(
     api: Api,
     result: Any,
     *,
     company: str,
-    writer: Writer,
+    targets: Sequence[Writer],
     spmon: str = "",
 ) -> dict[str, int]:
-    return load_rows(api, unwrap(api, result), company=company, writer=writer, spmon=spmon)
+    return load_rows(api, unwrap(api, result), company=company, targets=targets, spmon=spmon)
+
+
+def write_rows(
+    api: Api,
+    lists: dict[str, list[dict[str, Any]]],
+    *,
+    company: str,
+    moment: datetime,
+    spmon: str,
+    writer: Writer,
+) -> dict[str, int]:
+    inserted: dict[str, int] = {}
+
+    with writer.rows_cursor() as opened:
+        for key, out_key in zip(keys(api), api.out_keys, strict=True):
+            table = writer.tables.get(key)
+            if table is None:
+                logger.info("      %s", tag(writer, f"에 {key} 테이블이 없어 건너뜁니다"))
+                continue
+            rows = parameters(lists[out_key], moment=moment, company=company, spmon=spmon)
+            if not rows:
+                inserted[key] = 0
+                continue
+            try:
+                opened.executemany(insert_statement(table, spmon=bool(spmon)), rows)
+            except Exception as exc:
+                raise DatabaseError(f"{table} 데이터 쓰기에 실패했습니다: {exc}") from exc
+            inserted[key] = len(rows)
+            logger.info("      %s %d행 데이터 쓰기", tag(writer, table), len(rows))
+
+    return inserted
 
 
 def load_rows(
@@ -145,44 +241,51 @@ def load_rows(
     lists: dict[str, list[dict[str, Any]]],
     *,
     company: str,
-    writer: Writer,
+    targets: Sequence[Writer],
     spmon: str = "",
 ) -> dict[str, int]:
     moment = collected_at()
     month = spmon if uses_spmon(api) else ""
     inserted: dict[str, int] = {}
+    failures: list[str] = []
 
-    with writer.rows_cursor() as opened:
-        for ordinal, key in zip(ordinals(api), api.out_keys, strict=True):
-            table = temp_table(api.index, ordinal)
-            rows = parameters(lists[key], moment=moment, company=company, spmon=month)
-            if not rows:
-                inserted[table] = 0
-                continue
-            try:
-                opened.executemany(insert_statement(table, spmon=bool(month)), rows)
-            except Exception as exc:
-                raise DatabaseError(f"{table} 데이터 쓰기에 실패했습니다: {exc}") from exc
-            inserted[table] = len(rows)
-            logger.info("      %s %d행 데이터 쓰기", table, len(rows))
+    for writer in targets:
+        try:
+            written = write_rows(
+                api, lists, company=company, moment=moment, spmon=month, writer=writer
+            )
+        except Exception as exc:
+            logger.warning("      %s", tag(writer, str(exc)))
+            failures.append(tag(writer, str(exc)))
+            continue
+        inserted = {**inserted, **written}
 
-    for ordinal in ordinals(api):
-        run_procedure(procedure(api.index, ordinal), moment.date(), writer=writer)
+    if failures:
+        raise DatabaseError(", ".join(failures))
 
     return inserted
 
 
-def run_procedure(name: str, run_dt: date, *, writer: Writer) -> bool:
-    with writer.procedure_cursor() as opened:
-        opened.execute("SELECT OBJECT_ID(%s, 'P')", (qualified(name),))
-        row = opened.fetchone()
-        if row is None or row[0] is None:
-            logger.info("      %s 가 없어 건너뜁니다", name)
-            return False
-        try:
-            opened.execute(f"EXEC {qualified(name)} @run_dt = %s", (run_dt,))
-        except Exception as exc:
-            raise DatabaseError(f"{name} 실행에 실패했습니다: {exc}") from exc
+def bound(query: str, run_dt: date) -> tuple[str, tuple[Any, ...]]:
+    wanted = query.count(RUN_DT)
+    if not wanted:
+        return query, ()
+    return query.replace(RUN_DT, "%s"), (run_dt,) * wanted
 
-    logger.info("      %s 실행", name)
-    return True
+
+def run_queries(writer: Writer, run_dt: date) -> int:
+    for order, query in enumerate(writer.queries, start=1):
+        statement, params = bound(query, run_dt)
+        with writer.procedure_cursor() as opened:
+            try:
+                if params:
+                    opened.execute(statement, params)
+                else:
+                    opened.execute(statement)
+            except Exception as exc:
+                raise DatabaseError(
+                    tag(writer, f"{order}번째 쿼리 실행에 실패했습니다: {exc}")
+                ) from exc
+        logger.info("      %s", tag(writer, f"쿼리 {order}/{len(writer.queries)} 실행"))
+
+    return len(writer.queries)
