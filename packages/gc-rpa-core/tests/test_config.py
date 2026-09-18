@@ -33,8 +33,11 @@ ROW = {
 
 
 class FakeCursor:
-    def __init__(self, row: dict[str, Any] | None) -> None:
+    def __init__(
+        self, row: dict[str, Any] | None, rows: list[dict[str, Any]] | None = None
+    ) -> None:
         self.row = row
+        self.rows = rows or []
         self.executed: list[tuple[str, tuple[str, ...]]] = []
 
     def execute(self, query: str, params: tuple[str, ...]) -> None:
@@ -43,11 +46,14 @@ class FakeCursor:
     def fetchone(self) -> dict[str, Any] | None:
         return self.row
 
+    def fetchall(self) -> list[dict[str, Any]]:
+        return self.rows
+
 
 @pytest.fixture
 def fake_cursor(monkeypatch: pytest.MonkeyPatch) -> Any:
-    def install(row: dict[str, Any] | None) -> FakeCursor:
-        opened = FakeCursor(row)
+    def install(row: dict[str, Any] | None, rows: list[dict[str, Any]] | None = None) -> FakeCursor:
+        opened = FakeCursor(row, rows)
 
         @contextmanager
         def fake(*_a: Any, **_k: Any) -> Any:
@@ -122,3 +128,78 @@ def test_load_target_endpoint_is_unconfigured(fake_cursor: Any) -> None:
     fake_cursor(dict(ROW))
 
     assert config.load("1").target.configured is False
+
+
+def database_row(host: str, name: str) -> dict[str, Any]:
+    return {
+        **ROW,
+        "source_db": name,
+        "source_host": host,
+        "source_db_nm": "IT_Info",
+        "target_host": None,
+        "target_db_nm": None,
+        "temp_table": " Z_API_001_TEMP, Z_API_0031_TEMP ,",
+        "act_query": "EXEC FIRST_PROC; EXEC SECOND_PROC ;",
+    }
+
+
+def test_load_reads_actprg_id(fake_cursor: Any) -> None:
+    fake_cursor(dict(ROW))
+
+    assert config.load("1").actprg_id == "3"
+
+
+def test_load_databases_calls_the_procedure_with_actprg_id(fake_cursor: Any) -> None:
+    opened = fake_cursor(None, [database_row("svr-a", "운영")])
+
+    databases = config.load_databases("3")
+
+    query, params = opened.executed[0]
+    assert "ITM250_Schedule" in query
+    assert "@_actprg_id" in query
+    assert params == ("GetActDatabase", "3")
+    assert [database.name for database in databases] == ["운영"]
+
+
+def test_load_databases_returns_every_row(fake_cursor: Any) -> None:
+    fake_cursor(None, [database_row("svr-a", "운영"), database_row("svr-b", "백업")])
+
+    databases = config.load_databases("3")
+
+    assert [database.source.host for database in databases] == ["svr-a", "svr-b"]
+    assert all(database.source.database == "IT_Info" for database in databases)
+    assert all(database.source.configured for database in databases)
+
+
+def test_load_databases_falls_back_to_the_database_name(fake_cursor: Any) -> None:
+    fake_cursor(None, [{**database_row("svr-a", ""), "source_db_nm": "IT_Info"}])
+
+    assert config.load_databases("3")[0].name == "IT_Info"
+
+
+def test_load_databases_rejects_an_empty_answer(fake_cursor: Any) -> None:
+    fake_cursor(None, [])
+
+    with pytest.raises(LookupError, match="actprg_id='99'"):
+        config.load_databases("99")
+
+
+def test_load_databases_splits_the_table_list(fake_cursor: Any) -> None:
+    fake_cursor(None, [database_row("svr-a", "운영")])
+
+    assert config.load_databases("3")[0].tables == ("Z_API_001_TEMP", "Z_API_0031_TEMP")
+
+
+def test_load_databases_splits_the_query_list(fake_cursor: Any) -> None:
+    fake_cursor(None, [database_row("svr-a", "운영")])
+
+    assert config.load_databases("3")[0].queries == ("EXEC FIRST_PROC", "EXEC SECOND_PROC")
+
+
+def test_load_databases_leaves_empty_columns_empty(fake_cursor: Any) -> None:
+    fake_cursor(None, [{**database_row("svr-a", "운영"), "temp_table": None, "act_query": ""}])
+
+    database = config.load_databases("3")[0]
+
+    assert database.tables == ()
+    assert database.queries == ()

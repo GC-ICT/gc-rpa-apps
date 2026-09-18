@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from gc_rpa_core import config, hub
@@ -39,6 +39,23 @@ def system_name(build: Build, settings: config.RpaConfig) -> str:
     return build.signalr_system or settings.name or build.name or FALLBACK_SYSTEM
 
 
+def database_name(database: config.RpaDatabase) -> str:
+    return database.name or loader.label(database.source)
+
+
+def checked_databases(databases: Sequence[config.RpaDatabase]) -> tuple[config.RpaDatabase, ...]:
+    for database in databases:
+        shown = database_name(database)
+        if not database.source.configured:
+            raise LookupError(f"{shown} 의 접속정보가 비어 있습니다")
+        if not database.tables:
+            raise LookupError(f"{shown} 의 temp_table 이 비어 있습니다")
+        if not database.queries:
+            raise LookupError(f"{shown} 의 act_query 가 비어 있습니다")
+
+    return tuple(databases)
+
+
 @dataclass(frozen=True)
 class Outcome:
     rows: int
@@ -49,7 +66,7 @@ class Outcome:
         return self.rows == FAILED
 
 
-def collect_rows(api: Api, opened: Session, writer: loader.Writer) -> Outcome:
+def collect_rows(api: Api, opened: Session, targets: Sequence[loader.Writer]) -> Outcome:
     company = opened.company
     if registry.sweeps(api):
         results = api.sweep(opened, plants=registry.plants_for(api, company))
@@ -62,16 +79,16 @@ def collect_rows(api: Api, opened: Session, writer: loader.Writer) -> Outcome:
         note = " (예상된 오류)" if registry.expected_empty(api, company) else ""
         return Outcome(0, f"건너뜀 ({message(first)[:32]}){note}")
 
-    counts = loader.load_rows(api, api.collect_all(results), company=company, writer=writer)
+    counts = loader.load_rows(api, api.collect_all(results), company=company, targets=targets)
     total = sum(counts.values())
     received = sum(record_count(result) for result in answered)
     return Outcome(total, f"{total}행 (응답 {received}건)")
 
 
-def run_routine(api: Api, opened: Session, writer: loader.Writer) -> Outcome:
+def run_routine(api: Api, opened: Session, targets: Sequence[loader.Writer]) -> Outcome:
     company = opened.company
     try:
-        outcome = collect_rows(api, opened, writer)
+        outcome = collect_rows(api, opened, targets)
     except Exception as exc:
         if registry.expected_empty(api, company):
             outcome = Outcome(0, f"실패: {describe_error(exc)} (예상된 오류)")
@@ -92,9 +109,21 @@ def summarize_totals(totals: dict[str, int]) -> tuple[str, list[str]]:
     return summary, broken
 
 
+def finish(target: loader.Writer, report: Callable[[str, bool], None]) -> int:
+    try:
+        ran = loader.run_queries(target, loader.collected_at().date())
+    except Exception as exc:
+        logger.error("      %s", describe_error(exc))
+        report(f"{target.name} 쿼리 실패: {describe_error(exc)}", True)
+        return FAILED
+
+    report(f"{target.name} 쿼리 {ran}건 실행", False)
+    return 0
+
+
 def run(
-    settings: config.RpaConfig,
     build: Build,
+    databases: Sequence[config.RpaDatabase],
     *,
     report: Callable[[str, bool], None] = lambda *_: None,
 ) -> dict[str, int]:
@@ -104,25 +133,29 @@ def run(
         logger.info("수행할 API 가 없습니다")
         return totals
 
-    steps = len(chosen) + 1
-    targets = tuple(
+    steps = len(chosen) + 2
+    involved = tuple(
         company for company in companies() if any(api.supports(company) for api in chosen)
     )
 
-    with common.build_client() as client, loader.writer(settings.source) as writer:
-        sessions = {company: common.open_session(client, company) for company in targets}
+    with common.build_client() as client, loader.writers(databases) as targets:
+        sessions = {company: common.open_session(client, company) for company in involved}
 
         for done, api in enumerate(chosen, start=1):
             logger.info("[%d/%d] %s %s", done + 1, steps, api.index, api.name)
             for company, opened in sessions.items():
                 if not api.supports(company):
                     continue
-                outcome = run_routine(api, opened, writer)
+                outcome = run_routine(api, opened, targets)
                 totals[f"{company}/{api.index}"] = outcome.rows
                 report(
                     f"{api.index} {api.name} {company} {outcome.detail} ({done}/{len(chosen)})",
                     outcome.broken,
                 )
+
+        logger.info("[%d/%d] 마무리 쿼리", steps, steps)
+        for target in targets:
+            totals[f"{target.name}/쿼리"] = finish(target, report)
 
     return totals
 
@@ -146,18 +179,21 @@ def main() -> int:
         try:
             build = build_settings.current()
             settings = config.load(schedule_id(build))
+            databases = checked_databases(config.load_databases(settings.actprg_id))
+            written_to = ", ".join(database_name(database) for database in databases)
             name = system_name(build, settings)
             relay.system_name = name
             planned = registry.ordered(build.indexes)
             print_banner(name)
             logger.info(
                 "[1/%d] 설정 조회   %s (build=%s, schedule_id=%s, API %s)",
-                len(planned) + 1,
+                len(planned) + 2,
                 name,
                 build.name,
                 schedule_id(build),
                 ", ".join(api.index for api in planned),
             )
+            logger.info("      데이터 쓰기 대상 %s", written_to)
             hub_session.started(name=name)
 
             def report_step(text: str, broken: bool) -> None:
@@ -166,7 +202,7 @@ def main() -> int:
                 else:
                     hub_session.progress(message=text, name=name)
 
-            totals = run(settings, build, report=report_step)
+            totals = run(build, databases, report=report_step)
         except Exception as exc:
             logger.error("실패했습니다: %s", describe_error(exc))
             logger.debug("상세 내역", exc_info=True)
@@ -181,7 +217,7 @@ def main() -> int:
             hub_session.finished(message=summary, name=name)
 
     print_banner(f"완료했습니다  {summary}  ({time.monotonic() - started:.1f}초)")
-    print(f"  데이터 쓰기 대상: {settings.source.database}", flush=True)
+    print(f"  데이터 쓰기 대상: {written_to}", flush=True)
     return 1 if broken else 0
 
 
