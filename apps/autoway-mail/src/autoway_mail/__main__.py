@@ -4,7 +4,8 @@ import logging
 import sys
 import time
 
-from autoway_mail import common, erp, history, inbox, mail
+from autoway_mail import common, history, inbox, mail
+from gc_rpa_autoway import erp, files, site
 from gc_rpa_core import config, hub
 from gc_rpa_core.browser import chrome, clean_up_browsers_on_exit
 from gc_rpa_core.report import describe_error, print_banner, start_logging
@@ -15,13 +16,13 @@ logger = logging.getLogger(FALLBACK_SYSTEM)
 
 
 def warn_about_poppler() -> None:
-    complaint = common.poppler_complaint()
+    complaint = files.poppler_complaint()
     if complaint:
         logger.warning("      %s", complaint)
 
 
 def erp_target(settings: config.RpaConfig) -> erp.Target:
-    target = erp.target(common.erp_database(settings))
+    target = erp.target(erp.usable_database(settings), key_column=common.ERP_KEY_COLUMN)
     logger.info("      ERP 등록 %s / %s", target.endpoint.database, target.file_table)
     return target
 
@@ -53,8 +54,8 @@ def main() -> int:
 
             warn_about_poppler()
             target = erp_target(settings)
-            workspace = common.workspace(settings)
-            downloads = common.download_dir(settings)
+            workspace = files.workspace(settings)
+            downloads = files.download_dir(settings)
             logger.info("[2/3] 받은편지함   %s", workspace)
 
             with (
@@ -66,7 +67,7 @@ def main() -> int:
                 ) as driver,
                 history.opened(common.history_path(settings)) as store,
             ):
-                common.login(driver, settings)
+                site.login(driver, settings)
                 inbox.open_module(driver)
                 session = mail.Session(
                     driver=driver,

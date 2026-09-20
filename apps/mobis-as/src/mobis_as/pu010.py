@@ -8,6 +8,7 @@ from selenium.webdriver.common.by import By
 from gc_rpa_core import config
 from gc_rpa_core.browser import chrome, click, move_to, settled_files, wait_download, wait_ready
 from gc_rpa_core.env import optional_env
+from gc_rpa_core.report import size_text
 from mobis_as import common
 
 SCHEDULE_ID_ENV = "MOBIS_AS_SCHEDULE_ID"
@@ -60,8 +61,3 @@ def run(settings: config.RpaConfig | None = None, *, headless: bool = False) -> 
     moved = move_to(downloaded, settings.move_path)
     logger.info("[6/6] 파일 이동   %s", moved.parent)
     return moved
-
-
-def size_text(path: Path) -> str:
-    size = path.stat().st_size
-    return f"{size / 1024:,.0f} KB" if size >= 1024 else f"{size} B"

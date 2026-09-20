@@ -3,9 +3,10 @@ from typing import Any
 
 import pytest
 
-from autoway_mail import capture, erp, history, inbox, mail
+from autoway_mail import capture, history, inbox, mail
 from autoway_mail.inbox import Listing
 from autoway_mail.mail import Outcome, Session, Step, StepError, Tally
+from gc_rpa_autoway import erp
 from gc_rpa_core.browser import RendererHangError
 from gc_rpa_core.db import DbEndpoint
 
@@ -32,6 +33,7 @@ def erp_target() -> erp.Target:
         endpoint=DbEndpoint("test-erp.invalid", None, "ERP", "user", "pw"),
         header="EXEC [ERP].[dbo].[HRA700_Work] @_send_cust = {sender}",
         file_table="[ERPFileDB].[dbo].[HRA700_File]",
+        key_column="mail_no",
     )
 
 

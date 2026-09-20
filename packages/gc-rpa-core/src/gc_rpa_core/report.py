@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from pathlib import Path
 
 from gc_rpa_core.env import optional_env
 
@@ -31,6 +32,11 @@ def describe_error(exc: Exception) -> str:
     if detail in EMPTY_DETAILS:
         detail = NO_DETAIL
     return f"{type(exc).__name__}: {detail}"
+
+
+def size_text(path: Path) -> str:
+    size = path.stat().st_size
+    return f"{size / 1024:,.0f} KB" if size >= 1024 else f"{size} B"
 
 
 def print_banner(text: str) -> None:

@@ -9,6 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from gc_rpa_core import config
 from gc_rpa_core.config import RpaDatabase
 from gc_rpa_core.db import DbEndpoint, cursor
 from gc_rpa_core.statement import bind
@@ -37,9 +38,21 @@ class Target:
     endpoint: DbEndpoint
     header: str
     file_table: str
+    key_column: str
 
 
-def target(database: RpaDatabase) -> Target:
+def usable_database(settings: config.RpaConfig) -> RpaDatabase:
+    databases = config.load_databases(settings.actprg_id)
+    filled = next((database for database in databases if not database.complaint), None)
+    if filled is None:
+        raise LookupError(
+            f"{config.PROCEDURE} 의 actprg_id={settings.actprg_id} 에 "
+            f"쓸 수 있는 DB 가 없습니다: {databases[0].complaint}"
+        )
+    return filled
+
+
+def target(database: RpaDatabase, *, key_column: str) -> Target:
     if database.complaint:
         raise ErpError(database.complaint)
 
@@ -47,13 +60,14 @@ def target(database: RpaDatabase) -> Target:
         endpoint=database.source,
         header=database.queries[0],
         file_table=database.tables[0],
+        key_column=key_column,
     )
 
 
-def file_insert(table: str) -> str:
+def file_insert(table: str, key_column: str) -> str:
     return (
         f"INSERT INTO {table}"
-        "\n  (ID, mail_no, file_sq, file_byte, file_nm, file_sz, cid, cdt, mid, mdt)"
+        f"\n  (ID, {key_column}, file_sq, file_byte, file_nm, file_sz, cid, cdt, mid, mdt)"
         "\nVALUES (NEWID(), %s, %s, %s, %s, %s, 1, GETDATE(), 1, GETDATE())"
     )
 
@@ -137,7 +151,7 @@ def call_header(opened: Any, header: str, *, sender: str, subject: str, accepted
     if result != HEADER_OK:
         raise ErpError(f"ERP 등록 실패: {message or '사유 없음'}")
     if not message:
-        raise ErpError("ERP 등록 응답에 mail_no 가 없습니다")
+        raise ErpError("ERP 등록 응답에 문서번호가 없습니다")
     return message
 
 
@@ -162,9 +176,9 @@ def register(
             subject=subject or folder.name,
             accepted_on=accepted_on or date.today(),
         )
-        insert = file_insert(target.file_table)
+        insert = file_insert(target.file_table, target.key_column)
         for slot, path in placed:
             opened.execute(insert, file_row(document_no, slot, path))
 
-    logger.info("      ERP 등록 mail_no=%s (파일 %d건)", document_no, len(placed))
+    logger.info("      ERP 등록 %s=%s (파일 %d건)", target.key_column, document_no, len(placed))
     return document_no

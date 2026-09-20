@@ -1,12 +1,10 @@
 [project]
-name = "autoway-mail"
+name = "gc-rpa-autoway"
 version = "0.1.0"
-description = "오토웨이 메일 연동 앱"
+description = "오토웨이 사이트 공용 코드"
 requires-python = ">=3.12"
 dependencies = [
     "gc-rpa-core",
-    "gc-rpa-autoway",
-    "pdf2image>=1.17",
     "selenium>=4.27",
 ]
 
@@ -15,4 +13,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/autoway_mail"]
+packages = ["src/gc_rpa_autoway"]

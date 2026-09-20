@@ -1,10 +1,11 @@
 import logging
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from gc_rpa_core.report import describe_error, print_banner, start_logging
+from gc_rpa_core.report import describe_error, print_banner, size_text, start_logging
 
 
 @pytest.fixture
@@ -65,3 +66,13 @@ def test_start_logging_reads_the_level_from_the_environment(
     start_logging()
 
     assert asked["level"] == "DEBUG"
+
+
+def test_size_text_switches_unit_at_one_kilobyte(tmp_path: Path) -> None:
+    small = tmp_path / "small.txt"
+    small.write_bytes(b"x" * 512)
+    large = tmp_path / "large.txt"
+    large.write_bytes(b"x" * 2048)
+
+    assert size_text(small) == "512 B"
+    assert size_text(large) == "2 KB"

@@ -44,7 +44,7 @@ app_name = executable_name()
 
 a = Analysis(
     ["src/autoway_mail/__main__.py"],
-    pathex=["src", "../../packages/gc-rpa-core/src"],
+    pathex=["src", "../../packages/gc-rpa-core/src", "../../packages/gc-rpa-autoway/src"],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports
@@ -52,10 +52,13 @@ a = Analysis(
         "autoway_mail",
         "autoway_mail.capture",
         "autoway_mail.common",
-        "autoway_mail.erp",
         "autoway_mail.history",
         "autoway_mail.inbox",
         "autoway_mail.mail",
+        "gc_rpa_autoway",
+        "gc_rpa_autoway.erp",
+        "gc_rpa_autoway.files",
+        "gc_rpa_autoway.site",
         "gc_rpa_core",
     ],
     excludes=["tkinter", "pytest", "mypy", "ruff", "IPython"],

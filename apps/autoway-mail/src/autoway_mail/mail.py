@@ -9,7 +9,8 @@ from pathlib import Path
 
 from selenium.webdriver.remote.webdriver import WebDriver
 
-from autoway_mail import capture, common, erp, history, inbox
+from autoway_mail import capture, history, inbox
+from gc_rpa_autoway import erp, files
 from gc_rpa_core import config
 from gc_rpa_core.browser import RendererHangError, session_dead
 
@@ -166,7 +167,7 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
 
         step = Step.PDF
         pdf = capture.save_body_pdf(session.driver, folder)
-        capture.save_page_images(pdf, common.poppler_path())
+        capture.save_page_images(pdf, files.poppler_path())
 
         step = Step.REGISTER
         folder = hold(session, folder)

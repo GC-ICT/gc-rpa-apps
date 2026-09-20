@@ -4,7 +4,8 @@ from typing import Any
 
 import pytest
 
-from autoway_mail import erp
+from gc_rpa_autoway import erp
+from gc_rpa_core.config import RpaDatabase
 from gc_rpa_core.db import DbEndpoint
 
 FILE_TABLE = "[ERPFileDB].[dbo].[HRA700_File]"
@@ -17,6 +18,7 @@ TARGET = erp.Target(
     endpoint=DbEndpoint("test-erp.invalid", None, "ERP", "user", "pw"),
     header=HEADER,
     file_table=FILE_TABLE,
+    key_column="mail_no",
 )
 
 
@@ -240,7 +242,7 @@ def test_a_silent_procedure_is_an_error(tmp_path: Path, opened: Any) -> None:
 def test_a_missing_document_number_is_an_error(tmp_path: Path, opened: Any) -> None:
     opened(("OK", ""))
 
-    with pytest.raises(erp.ErpError, match="mail_no 가 없습니다"):
+    with pytest.raises(erp.ErpError, match="문서번호가 없습니다"):
         erp.register(folder_with(tmp_path, "a.pdf"), sender="보낸이", subject="제목", target=TARGET)
 
 
@@ -290,49 +292,53 @@ def test_composed_korean_is_untouched() -> None:
     assert erp.clean_name("회의록_260917.pptx") == "회의록_260917.pptx"
 
 
+def rpa_database(**fields: Any) -> RpaDatabase:
+    defaults: dict[str, Any] = {
+        "name": "ERP",
+        "source": DbEndpoint("test-erp.invalid", None, "ERP", "user", "pw"),
+        "target": DbEndpoint("", None, "", "", ""),
+        "tables": (FILE_TABLE,),
+        "queries": (HEADER,),
+    }
+    return RpaDatabase(**{**defaults, **fields})
+
+
 def test_target_reads_the_statement_and_table_from_the_procedure() -> None:
-    from gc_rpa_core.config import RpaDatabase
-
-    database = RpaDatabase(
-        name="ERP",
-        source=DbEndpoint("test-erp.invalid", None, "ERP", "user", "pw"),
-        target=DbEndpoint("", None, "", "", ""),
-        tables=(FILE_TABLE,),
-        queries=(HEADER,),
-    )
-
-    built = erp.target(database)
+    built = erp.target(rpa_database(), key_column="docu_no")
 
     assert built.endpoint.database == "ERP"
     assert built.header == HEADER
     assert built.file_table == FILE_TABLE
+    assert built.key_column == "docu_no"
 
 
 def test_target_complains_when_the_statement_is_missing() -> None:
-    from gc_rpa_core.config import RpaDatabase
-
-    database = RpaDatabase(
-        name="ERP",
-        source=DbEndpoint("test-erp.invalid", None, "ERP", "user", "pw"),
-        target=DbEndpoint("", None, "", "", ""),
-        tables=(FILE_TABLE,),
-        queries=(),
-    )
-
     with pytest.raises(erp.ErpError, match="act_query"):
-        erp.target(database)
+        erp.target(rpa_database(queries=()), key_column="mail_no")
 
 
 def test_target_complains_when_the_file_table_is_missing() -> None:
-    from gc_rpa_core.config import RpaDatabase
-
-    database = RpaDatabase(
-        name="ERP",
-        source=DbEndpoint("test-erp.invalid", None, "ERP", "user", "pw"),
-        target=DbEndpoint("", None, "", "", ""),
-        tables=(),
-        queries=(HEADER,),
-    )
-
     with pytest.raises(erp.ErpError, match="temp_table"):
-        erp.target(database)
+        erp.target(rpa_database(tables=()), key_column="mail_no")
+
+
+def test_the_file_insert_names_the_key_column_of_the_target() -> None:
+    assert "(ID, docu_no, file_sq" in erp.file_insert(FILE_TABLE, "docu_no")
+
+
+def test_usable_database_picks_the_first_filled_in_row(
+    monkeypatch: pytest.MonkeyPatch, rpa_settings: Any
+) -> None:
+    rows = (rpa_database(name="빈 DB", queries=()), rpa_database(name="쓸 수 있는 DB"))
+    monkeypatch.setattr(erp.config, "load_databases", lambda _: rows)
+
+    assert erp.usable_database(rpa_settings).name == "쓸 수 있는 DB"
+
+
+def test_usable_database_complains_when_every_row_is_short(
+    monkeypatch: pytest.MonkeyPatch, rpa_settings: Any
+) -> None:
+    monkeypatch.setattr(erp.config, "load_databases", lambda _: (rpa_database(queries=()),))
+
+    with pytest.raises(LookupError, match="act_query"):
+        erp.usable_database(rpa_settings)
