@@ -82,6 +82,10 @@ def envelope(payload: dict[str, Any], *, result: str = "Z") -> dict[str, Any]:
     }
 
 
+def lists(api: Any, payload: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    return api.collect(envelope(payload))
+
+
 def test_table_key_reads_the_api_number() -> None:
     assert loader.table_key("Z_API_001_TEMP") == "001"
     assert loader.table_key("IT_Info.dbo.Z_API_0031_TEMP") == "0031"
@@ -95,12 +99,7 @@ def test_table_key_is_empty_for_an_unreadable_name() -> None:
 def test_keys_follow_the_list_count() -> None:
     assert loader.keys(registry.BY_INDEX["001"]) == ("001",)
     assert loader.keys(registry.BY_INDEX["003"]) == ("0031", "0032")
-
-
-def test_ordinals_depend_on_list_count() -> None:
-    assert loader.ordinals(registry.BY_INDEX["001"]) == ("",)
-    assert loader.ordinals(registry.BY_INDEX["003"]) == ("1", "2")
-    assert loader.ordinals(registry.BY_INDEX["007"]) == ("1", "2")
+    assert loader.keys(registry.BY_INDEX["007"]) == ("0071", "0072")
 
 
 def test_qualified_name_is_bracketed() -> None:
@@ -117,35 +116,6 @@ def test_qualified_name_keeps_what_the_procedure_spelled_out() -> None:
         "[OTHER].[staging].[Z_API_001_TEMP]"
     )
     assert loader.qualified("[OTHER].[dbo].[Z_API_001_TEMP]") == "[OTHER].[dbo].[Z_API_001_TEMP]"
-
-
-def test_unwrap_parses_the_inner_json() -> None:
-    api = registry.BY_INDEX["001"]
-    result = envelope({"OUT_LIST": [{"MATNR": "M1"}, {"MATNR": "M2"}]})
-
-    assert loader.unwrap(api, result) == {"OUT_LIST": [{"MATNR": "M1"}, {"MATNR": "M2"}]}
-
-
-def test_unwrap_returns_empty_list_for_missing_key() -> None:
-    api = registry.BY_INDEX["003"]
-    result = envelope({"ET_EXPORT1": [{"A": "1"}]})
-
-    assert loader.unwrap(api, result) == {"ET_EXPORT1": [{"A": "1"}], "ET_EXPORT2": []}
-
-
-def test_unwrap_rejects_failed_response() -> None:
-    api = registry.BY_INDEX["001"]
-
-    with pytest.raises(loader.ResponseError, match="응답이 실패했습니다"):
-        loader.unwrap(api, envelope({}, result="E"))
-
-
-def test_unwrap_labels_broken_envelope() -> None:
-    api = registry.BY_INDEX["001"]
-    broken = {"outData": {"E_IFRESULT": "Z", "OUTDATA_JSON": "{not json"}}
-
-    with pytest.raises(loader.ResponseError, match="응답 본문"):
-        loader.unwrap(api, broken)
 
 
 def test_insert_statement_has_four_columns() -> None:
@@ -194,8 +164,8 @@ def test_load_inserts_into_the_table_the_procedure_named(fake_writer: Any) -> No
     opened, writer = fake_writer(known={"001": "[RPA].[dbo].[MY_INBOX]"})
     api = registry.BY_INDEX["001"]
 
-    counts = loader.load(
-        api, envelope({"OUT_LIST": [{"A": "1"}, {"A": "2"}]}), company="HMC", targets=[writer]
+    counts = loader.load_rows(
+        api, lists(api, {"OUT_LIST": [{"A": "1"}, {"A": "2"}]}), company="HMC", targets=[writer]
     )
 
     assert counts == {"001": 2}
@@ -205,12 +175,10 @@ def test_load_inserts_into_the_table_the_procedure_named(fake_writer: Any) -> No
 
 def test_load_skips_an_api_the_database_has_no_table_for(fake_writer: Any) -> None:
     opened, writer = fake_writer(known={"002": "[IT_Info].[dbo].[Z_API_002_TEMP]"})
+    api = registry.BY_INDEX["001"]
 
-    counts = loader.load(
-        registry.BY_INDEX["001"],
-        envelope({"OUT_LIST": [{"A": "1"}]}),
-        company="HMC",
-        targets=[writer],
+    counts = loader.load_rows(
+        api, lists(api, {"OUT_LIST": [{"A": "1"}]}), company="HMC", targets=[writer]
     )
 
     assert counts == {}
@@ -220,9 +188,9 @@ def test_load_skips_an_api_the_database_has_no_table_for(fake_writer: Any) -> No
 def test_load_splits_two_lists_into_two_tables(fake_writer: Any) -> None:
     opened, writer = fake_writer()
     api = registry.BY_INDEX["003"]
-    result = envelope({"ET_EXPORT1": [{"A": "1"}], "ET_EXPORT2": [{"B": "1"}, {"B": "2"}]})
+    result = lists(api, {"ET_EXPORT1": [{"A": "1"}], "ET_EXPORT2": [{"B": "1"}, {"B": "2"}]})
 
-    counts = loader.load(api, result, company="HMC", targets=[writer])
+    counts = loader.load_rows(api, result, company="HMC", targets=[writer])
 
     assert counts == {"0031": 1, "0032": 2}
     assert "Z_API_0031_TEMP" in opened.many[0][0]
@@ -231,10 +199,9 @@ def test_load_splits_two_lists_into_two_tables(fake_writer: Any) -> None:
 
 def test_load_skips_insert_for_empty_list(fake_writer: Any) -> None:
     opened, writer = fake_writer()
+    api = registry.BY_INDEX["001"]
 
-    counts = loader.load(
-        registry.BY_INDEX["001"], envelope({"OUT_LIST": []}), company="HMC", targets=[writer]
-    )
+    counts = loader.load_rows(api, lists(api, {"OUT_LIST": []}), company="HMC", targets=[writer])
 
     assert counts == {"001": 0}
     assert opened.many == []
@@ -256,13 +223,6 @@ def test_run_queries_binds_the_run_date(fake_writer: Any) -> None:
     assert opened.executed == [("EXEC A_PROC @run_dt = %s", (date(2026, 9, 16),))]
 
 
-def test_run_queries_binds_every_mention_of_the_run_date() -> None:
-    statement, params = loader.bound("SELECT {run_dt}, {run_dt}", date(2026, 9, 16))
-
-    assert statement == "SELECT %s, %s"
-    assert params == (date(2026, 9, 16), date(2026, 9, 16))
-
-
 def test_run_queries_names_the_database_that_failed(fake_writer: Any) -> None:
     opened, writer = fake_writer(name="db-a", queries=("EXEC A_PROC",))
 
@@ -275,32 +235,26 @@ def test_run_queries_names_the_database_that_failed(fake_writer: Any) -> None:
         loader.run_queries(writer, date(2026, 9, 16))
 
 
-def test_failed_response_stops_before_insert(fake_writer: Any) -> None:
+def test_a_failed_response_writes_nothing(fake_writer: Any) -> None:
     opened, writer = fake_writer()
+    api = registry.BY_INDEX["001"]
 
-    with pytest.raises(loader.ResponseError):
-        loader.load(
-            registry.BY_INDEX["001"], envelope({}, result="E"), company="HMC", targets=[writer]
-        )
+    counts = loader.load_rows(
+        api, api.collect(envelope({}, result="E")), company="HMC", targets=[writer]
+    )
 
+    assert counts == {"001": 0}
     assert opened.many == []
 
 
 def test_each_api_commits_on_its_own(fake_writer: Any) -> None:
     _, writer = fake_writer()
 
-    loader.load(
-        registry.BY_INDEX["001"],
-        envelope({"OUT_LIST": [{"A": "1"}]}),
-        company="HMC",
-        targets=[writer],
-    )
-    loader.load(
-        registry.BY_INDEX["002"],
-        envelope({"OUT_LIST": [{"A": "2"}]}),
-        company="HMC",
-        targets=[writer],
-    )
+    for index in ("001", "002"):
+        api = registry.BY_INDEX[index]
+        loader.load_rows(
+            api, lists(api, {"OUT_LIST": [{"A": index}]}), company="HMC", targets=[writer]
+        )
 
     assert writer.rows.commits == 2
     assert writer.rows.rollbacks == 0
@@ -324,11 +278,9 @@ def test_load_writes_the_same_rows_to_every_database(fake_writer: Any) -> None:
     first, one = fake_writer("db-a", {"001": "[A].[dbo].[Z_API_001_TEMP]"})
     second, two = fake_writer("db-b", {"001": "[B].[dbo].[Z_API_001_TEMP]"})
 
-    counts = loader.load(
-        registry.BY_INDEX["001"],
-        envelope({"OUT_LIST": [{"A": "1"}, {"A": "2"}]}),
-        company="HMC",
-        targets=[one, two],
+    api = registry.BY_INDEX["001"]
+    counts = loader.load_rows(
+        api, lists(api, {"OUT_LIST": [{"A": "1"}, {"A": "2"}]}), company="HMC", targets=[one, two]
     )
 
     assert counts == {"001": 2}
@@ -347,12 +299,10 @@ def test_a_broken_database_does_not_stop_the_others(fake_writer: Any) -> None:
 
     broken_cursor.executemany = boom  # type: ignore[method-assign]
 
+    api = registry.BY_INDEX["001"]
     with pytest.raises(loader.DatabaseError) as failure:
-        loader.load(
-            registry.BY_INDEX["001"],
-            envelope({"OUT_LIST": [{"A": "1"}]}),
-            company="HMC",
-            targets=[broken, healthy],
+        loader.load_rows(
+            api, lists(api, {"OUT_LIST": [{"A": "1"}]}), company="HMC", targets=[broken, healthy]
         )
 
     assert "db-a" in str(failure.value)

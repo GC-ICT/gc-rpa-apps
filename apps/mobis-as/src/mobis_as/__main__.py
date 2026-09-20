@@ -6,14 +6,12 @@ import time
 
 from gc_rpa_core import hub
 from gc_rpa_core.env import optional_env
-from gc_rpa_core.report import describe_error, print_banner
+from gc_rpa_core.report import describe_error, print_banner, start_logging
 from mobis_as import pu010
 
 FALLBACK_SYSTEM = "mobis-as"
-QUIET_LOGGERS = ("pysignalr", "urllib3", "websockets", "asyncio")
 VERBOSE_LOGGERS = ("gc_rpa_core.browser",)
 HEADLESS_ENV = "MOBIS_AS_HEADLESS"
-LOG_LEVEL_ENV = "GC_RPA_LOG_LEVEL"
 
 logger = logging.getLogger(FALLBACK_SYSTEM)
 
@@ -23,16 +21,7 @@ def headless() -> bool:
 
 
 def main() -> int:
-    logging.basicConfig(
-        level=optional_env(LOG_LEVEL_ENV, "INFO"),
-        format="%(asctime)s  %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    for name in QUIET_LOGGERS:
-        logging.getLogger(name).setLevel(logging.WARNING)
-    for name in VERBOSE_LOGGERS:
-        logging.getLogger(name).setLevel(logging.INFO)
-
+    start_logging(verbose=VERBOSE_LOGGERS)
     started = time.monotonic()
     name = FALLBACK_SYSTEM
 

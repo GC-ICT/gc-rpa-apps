@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from gc_rpa_core import config, hub
 from gc_rpa_core.env import optional_env
-from gc_rpa_core.report import describe_error, print_banner
+from gc_rpa_core.report import describe_error, print_banner, start_logging
 from hkmc_api_app import build_settings, common, loader, registry
 from hkmc_api_app.build_settings import Build
 from hkmc_api_app.common import Api, Session, message, record_count, succeeded
@@ -17,9 +17,6 @@ FALLBACK_SYSTEM = "hkmc-api"
 FAILED = -1
 SCHEDULE_ID_ENV = "HKMC_SCHEDULE_ID"
 COMPANIES_ENV = "HKMC_COMPANIES"
-LOG_LEVEL_ENV = "GC_RPA_LOG_LEVEL"
-
-QUIET_LOGGERS = ("pysignalr", "urllib3", "websockets", "asyncio", "httpx", "httpcore")
 
 logger = logging.getLogger(FALLBACK_SYSTEM)
 
@@ -39,21 +36,47 @@ def system_name(build: Build, settings: config.RpaConfig) -> str:
     return build.signalr_system or settings.name or build.name or FALLBACK_SYSTEM
 
 
-def database_name(database: config.RpaDatabase) -> str:
-    return database.name or loader.label(database.source)
-
-
 def checked_databases(databases: Sequence[config.RpaDatabase]) -> tuple[config.RpaDatabase, ...]:
     for database in databases:
-        shown = database_name(database)
-        if not database.source.configured:
-            raise LookupError(f"{shown} 의 접속정보가 비어 있습니다")
-        if not database.tables:
-            raise LookupError(f"{shown} 의 temp_table 이 비어 있습니다")
-        if not database.queries:
-            raise LookupError(f"{shown} 의 act_query 가 비어 있습니다")
+        if database.complaint:
+            raise LookupError(database.complaint)
 
     return tuple(databases)
+
+
+@dataclass(frozen=True)
+class Plan:
+    build: Build
+    databases: tuple[config.RpaDatabase, ...]
+    name: str
+
+    @property
+    def written_to(self) -> str:
+        return ", ".join(database.label for database in self.databases)
+
+
+def plan() -> Plan:
+    build = build_settings.current()
+    settings = config.load(schedule_id(build))
+    return Plan(
+        build=build,
+        databases=checked_databases(config.load_databases(settings.actprg_id)),
+        name=system_name(build, settings),
+    )
+
+
+def announce(chosen: Plan) -> None:
+    planned = registry.ordered(chosen.build.indexes)
+    print_banner(chosen.name)
+    logger.info(
+        "[1/%d] 설정 조회   %s (build=%s, schedule_id=%s, API %s)",
+        len(planned) + 2,
+        chosen.name,
+        chosen.build.name,
+        schedule_id(chosen.build),
+        ", ".join(api.index for api in planned),
+    )
+    logger.info("      데이터 쓰기 대상 %s", chosen.written_to)
 
 
 @dataclass(frozen=True)
@@ -161,39 +184,21 @@ def run(
 
 
 def main() -> int:
-    logging.basicConfig(
-        level=optional_env(LOG_LEVEL_ENV, "INFO"),
-        format="%(asctime)s  %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    for name in QUIET_LOGGERS:
-        logging.getLogger(name).setLevel(logging.WARNING)
-
-    started = time.monotonic()
+    start_logging()
+    began = time.monotonic()
     name = FALLBACK_SYSTEM
+    written_to = ""
 
     with (
         hub.session() as hub_session,
         hub.forwarding(hub_session, logger, level=logging.ERROR) as relay,
     ):
         try:
-            build = build_settings.current()
-            settings = config.load(schedule_id(build))
-            databases = checked_databases(config.load_databases(settings.actprg_id))
-            written_to = ", ".join(database_name(database) for database in databases)
-            name = system_name(build, settings)
+            chosen = plan()
+            name = chosen.name
+            written_to = chosen.written_to
             relay.system_name = name
-            planned = registry.ordered(build.indexes)
-            print_banner(name)
-            logger.info(
-                "[1/%d] 설정 조회   %s (build=%s, schedule_id=%s, API %s)",
-                len(planned) + 2,
-                name,
-                build.name,
-                schedule_id(build),
-                ", ".join(api.index for api in planned),
-            )
-            logger.info("      데이터 쓰기 대상 %s", written_to)
+            announce(chosen)
             hub_session.started(name=name)
 
             def report_step(text: str, broken: bool) -> None:
@@ -202,12 +207,12 @@ def main() -> int:
                 else:
                     hub_session.progress(message=text, name=name)
 
-            totals = run(build, databases, report=report_step)
+            totals = run(chosen.build, chosen.databases, report=report_step)
         except Exception as exc:
             logger.error("실패했습니다: %s", describe_error(exc))
             logger.debug("상세 내역", exc_info=True)
             hub_session.failed(message=describe_error(exc), name=name)
-            print_banner(f"실패했습니다  ({time.monotonic() - started:.1f}초)")
+            print_banner(f"실패했습니다  ({time.monotonic() - began:.1f}초)")
             return 1
 
         summary, broken = summarize_totals(totals)
@@ -216,7 +221,7 @@ def main() -> int:
         else:
             hub_session.finished(message=summary, name=name)
 
-    print_banner(f"완료했습니다  {summary}  ({time.monotonic() - started:.1f}초)")
+    print_banner(f"완료했습니다  {summary}  ({time.monotonic() - began:.1f}초)")
     print(f"  데이터 쓰기 대상: {written_to}", flush=True)
     return 1 if broken else 0
 

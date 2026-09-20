@@ -15,9 +15,6 @@ from gc_rpa_core.statement import bind
 
 HEADER_OK = "OK"
 
-FILE_COLUMNS = "(ID, mail_no, file_sq, file_byte, file_nm, file_sz, cid, cdt, mid, mdt)"
-FILE_VALUES = "(NEWID(), %s, %s, %s, %s, %s, 1, GETDATE(), 1, GETDATE())"
-
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
 PDF_SUFFIX = ".pdf"
 ARCHIVE_SUFFIX = ".zip"
@@ -43,10 +40,8 @@ class Target:
 
 
 def target(database: RpaDatabase) -> Target:
-    if not database.queries:
-        raise ErpError(f"{database.name} 에 등록 프로시저 실행문(act_query) 이 없습니다")
-    if not database.tables:
-        raise ErpError(f"{database.name} 에 첨부 파일 테이블(temp_table) 이 없습니다")
+    if database.complaint:
+        raise ErpError(database.complaint)
 
     return Target(
         endpoint=database.source,
@@ -56,7 +51,11 @@ def target(database: RpaDatabase) -> Target:
 
 
 def file_insert(table: str) -> str:
-    return f"INSERT INTO {table}\n  {FILE_COLUMNS}\nVALUES {FILE_VALUES}"
+    return (
+        f"INSERT INTO {table}"
+        "\n  (ID, mail_no, file_sq, file_byte, file_nm, file_sz, cid, cdt, mid, mdt)"
+        "\nVALUES (NEWID(), %s, %s, %s, %s, %s, 1, GETDATE(), 1, GETDATE())"
+    )
 
 
 def clean_name(value: str) -> str:

@@ -32,6 +32,10 @@ class DbEndpoint:
     def configured(self) -> bool:
         return bool(self.host and self.database)
 
+    @property
+    def label(self) -> str:
+        return f"{self.host}/{self.database}" if self.host else self.database
+
 
 def split_host(value: str) -> tuple[str, int | None]:
     host, _, trailing = value.partition(",")

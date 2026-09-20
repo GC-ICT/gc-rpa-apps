@@ -10,9 +10,9 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from gc_rpa_core.config import RpaDatabase
-from gc_rpa_core.db import DbEndpoint, connect
+from gc_rpa_core.db import connect
 from gc_rpa_core.statement import bind
-from hkmc_api_app.common import Api, outdata, succeeded
+from hkmc_api_app.common import Api
 
 DATABASE = "IT_Info"
 SCHEMA = "dbo"
@@ -26,10 +26,6 @@ TABLE_PATTERN = re.compile(r"Z_API_(\d{3})(\d?)_TEMP", re.IGNORECASE)
 NAME_PATTERN = re.compile(r"^[\w.\[\]]+$")
 
 logger = logging.getLogger(__name__)
-
-
-class ResponseError(RuntimeError):
-    pass
 
 
 class DatabaseError(RuntimeError):
@@ -66,10 +62,6 @@ class Writer:
             opened.close()
 
 
-def label(endpoint: DbEndpoint) -> str:
-    return f"{endpoint.host}/{endpoint.database}" if endpoint.host else endpoint.database
-
-
 def qualified(name: str, database: str = DATABASE) -> str:
     parts = [part.strip().strip("[]") for part in name.split(".") if part.strip()]
     if len(parts) >= 3:
@@ -89,7 +81,7 @@ def tables_of(database: RpaDatabase) -> dict[str, str]:
     for name in database.tables:
         key = table_key(name)
         if not key:
-            logger.warning("      %s 의 %s 은 API 번호를 읽을 수 없습니다", database.name, name)
+            logger.warning("      %s 의 %s 은 API 번호를 읽을 수 없습니다", database.label, name)
             continue
         found[key] = qualified(name, database.source.database)
     return found
@@ -114,7 +106,7 @@ def writer(database: RpaDatabase) -> Iterator[Writer]:
         yield Writer(
             rows=rows,
             procedures=procedures,
-            name=database.name or label(database.source),
+            name=database.label,
             tables=tables_of(database),
             queries=statements_of(database),
         )
@@ -128,38 +120,20 @@ def writers(databases: Sequence[RpaDatabase]) -> Iterator[tuple[Writer, ...]]:
             try:
                 opened.append(stack.enter_context(writer(database)))
             except Exception as exc:
-                shown = database.name or label(database.source)
-                logger.warning("      %s 에 붙지 못해 건너뜁니다: %s", shown, exc)
+                logger.warning("      %s 에 붙지 못해 건너뜁니다: %s", database.label, exc)
         if not opened:
             raise DatabaseError("데이터를 쓸 수 있는 DB 가 없습니다")
         yield tuple(opened)
 
 
-def ordinals(api: Api) -> tuple[str, ...]:
-    if len(api.out_keys) == 1:
-        return ("",)
-    return tuple(str(position) for position, _ in enumerate(api.out_keys, start=1))
-
-
 def keys(api: Api) -> tuple[str, ...]:
-    return tuple(f"{api.index}{ordinal}" for ordinal in ordinals(api))
+    if len(api.out_keys) == 1:
+        return (api.index,)
+    return tuple(f"{api.index}{position}" for position, _ in enumerate(api.out_keys, start=1))
 
 
 def collected_at() -> datetime:
     return datetime.now(KST).replace(tzinfo=None)
-
-
-def unwrap(api: Api, result: Any) -> dict[str, list[dict[str, Any]]]:
-    try:
-        if not succeeded(result):
-            raise ResponseError(f"응답이 실패했습니다: {result['outData']['E_IFMSG']}")
-        parsed = outdata(result)
-    except ResponseError:
-        raise
-    except Exception as exc:
-        raise ResponseError(f"응답 본문을 해석하지 못했습니다: {exc}") from exc
-
-    return {key: parsed.get(key) or [] for key in api.out_keys}
 
 
 def insert_statement(table: str, *, spmon: bool) -> str:
@@ -193,17 +167,6 @@ def uses_spmon(api: Api) -> bool:
 
 def tag(writer: Writer, message: str) -> str:
     return f"{writer.name} {message}" if writer.name else message
-
-
-def load(
-    api: Api,
-    result: Any,
-    *,
-    company: str,
-    targets: Sequence[Writer],
-    spmon: str = "",
-) -> dict[str, int]:
-    return load_rows(api, unwrap(api, result), company=company, targets=targets, spmon=spmon)
 
 
 def write_rows(
@@ -256,10 +219,11 @@ def load_rows(
                 api, lists, company=company, moment=moment, spmon=month, writer=writer
             )
         except Exception as exc:
-            logger.warning("      %s", tag(writer, str(exc)))
-            failures.append(tag(writer, str(exc)))
+            complaint = tag(writer, str(exc))
+            logger.warning("      %s", complaint)
+            failures.append(complaint)
             continue
-        inserted = {**inserted, **written}
+        inserted.update(written)
 
     if failures:
         raise DatabaseError(", ".join(failures))
@@ -267,13 +231,9 @@ def load_rows(
     return inserted
 
 
-def bound(query: str, run_dt: date) -> tuple[str, tuple[Any, ...]]:
-    return bind(query, {"run_dt": run_dt})
-
-
 def run_queries(writer: Writer, run_dt: date) -> int:
     for order, query in enumerate(writer.queries, start=1):
-        statement, params = bound(query, run_dt)
+        statement, params = bind(query, {"run_dt": run_dt})
         with writer.procedure_cursor() as opened:
             try:
                 if params:

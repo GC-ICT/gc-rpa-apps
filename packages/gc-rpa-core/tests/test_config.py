@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 from gc_rpa_core import config
+from gc_rpa_core.db import DbEndpoint
 
 ROW = {
     "actprg_id": 3,
@@ -203,3 +204,40 @@ def test_load_databases_leaves_empty_columns_empty(fake_cursor: Any) -> None:
 
     assert database.tables == ()
     assert database.queries == ()
+
+
+def rpa_database(**fields: Any) -> config.RpaDatabase:
+    defaults: dict[str, Any] = {
+        "name": "운영",
+        "source": DbEndpoint("svr-a", None, "IT_Info", "rpa", "pw"),
+        "target": DbEndpoint("", None, "", "", ""),
+        "tables": ("Z_API_001_TEMP",),
+        "queries": ("EXEC A_PROC",),
+    }
+    return config.RpaDatabase(**{**defaults, **fields})
+
+
+def test_a_database_is_labelled_by_its_name() -> None:
+    assert rpa_database().label == "운영"
+
+
+def test_a_nameless_database_is_labelled_by_its_endpoint() -> None:
+    assert rpa_database(name="").label == "svr-a/IT_Info"
+
+
+def test_a_filled_in_database_has_nothing_to_complain_about() -> None:
+    assert rpa_database().complaint == ""
+
+
+def test_a_database_complains_about_its_empty_endpoint() -> None:
+    empty = DbEndpoint("", None, "", "", "")
+
+    assert "접속정보" in rpa_database(source=empty).complaint
+
+
+def test_a_database_complains_about_its_missing_tables() -> None:
+    assert "temp_table" in rpa_database(tables=()).complaint
+
+
+def test_a_database_complains_about_its_missing_queries() -> None:
+    assert "act_query" in rpa_database(queries=()).complaint

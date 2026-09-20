@@ -67,6 +67,20 @@ class RpaDatabase:
     tables: tuple[str, ...] = ()
     queries: tuple[str, ...] = ()
 
+    @property
+    def label(self) -> str:
+        return self.name or self.source.label
+
+    @property
+    def complaint(self) -> str:
+        if not self.source.configured:
+            return f"{self.label} 의 접속정보가 비어 있습니다"
+        if not self.tables:
+            return f"{self.label} 의 temp_table 이 비어 있습니다"
+        if not self.queries:
+            return f"{self.label} 의 act_query 가 비어 있습니다"
+        return ""
+
 
 def load(schedule_id: str) -> RpaConfig:
     with cursor() as opened:
