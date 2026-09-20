@@ -4,33 +4,19 @@ import logging
 import re
 import unicodedata
 import zipfile
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
 
+from gc_rpa_core.config import RpaDatabase
 from gc_rpa_core.db import DbEndpoint, cursor
+from gc_rpa_core.statement import bind
 
-HEADER_PROCEDURE = "dbo.HRA700_Work"
-HEADER_CALL = f"""
-EXEC {HEADER_PROCEDURE}
-     @_fac_cd = %s,
-     @_acpt_dt = %s,
-     @_acpt_bc = %s,
-     @_send_cust = %s,
-     @_mail_sub = %s,
-     @_save_ty = 'INSERT'
-"""
 HEADER_OK = "OK"
 
-FACTORY = "P01"
-ACCEPT_CODE = "HR61401"
-
-FILE_TABLE = "[ERPFileDB].[dbo].[HRA700_File]"
-FILE_INSERT = f"""
-INSERT INTO {FILE_TABLE}
-  (ID, mail_no, file_sq, file_byte, file_nm, file_sz, cid, cdt, mid, mdt)
-VALUES (NEWID(), %s, %s, %s, %s, %s, 1, GETDATE(), 1, GETDATE())
-"""
+FILE_COLUMNS = "(ID, mail_no, file_sq, file_byte, file_nm, file_sz, cid, cdt, mid, mdt)"
+FILE_VALUES = "(NEWID(), %s, %s, %s, %s, %s, 1, GETDATE(), 1, GETDATE())"
 
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
 PDF_SUFFIX = ".pdf"
@@ -49,6 +35,30 @@ class ErpError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class Target:
+    endpoint: DbEndpoint
+    header: str
+    file_table: str
+
+
+def target(database: RpaDatabase) -> Target:
+    if not database.queries:
+        raise ErpError(f"{database.name} 에 등록 프로시저 실행문(act_query) 이 없습니다")
+    if not database.tables:
+        raise ErpError(f"{database.name} 에 첨부 파일 테이블(temp_table) 이 없습니다")
+
+    return Target(
+        endpoint=database.source,
+        header=database.queries[0],
+        file_table=database.tables[0],
+    )
+
+
+def file_insert(table: str) -> str:
+    return f"INSERT INTO {table}\n  {FILE_COLUMNS}\nVALUES {FILE_VALUES}"
+
+
 def clean_name(value: str) -> str:
     joined = unicodedata.normalize("NFC", value)
     return re.sub(r"[^0-9A-Za-z가-힣\[\]\(\)\{\}\-_.\s]+", "", joined).strip()[:NAME_LIMIT]
@@ -56,10 +66,10 @@ def clean_name(value: str) -> str:
 
 def unpack_archives(folder: Path) -> None:
     for archive in sorted(folder.rglob(f"*{ARCHIVE_SUFFIX}")):
-        target = archive.with_suffix("")
+        unpacked = archive.with_suffix("")
         try:
             with zipfile.ZipFile(archive) as opened:
-                opened.extractall(target)
+                opened.extractall(unpacked)
         except Exception as exc:
             logger.warning("      압축을 풀지 못해 그대로 올립니다: %s (%s)", archive.name, exc)
             continue
@@ -117,17 +127,18 @@ def answered(row: Any) -> tuple[str, str]:
     return str(values[0] or "").strip().upper(), str(values[1] or "").strip()
 
 
-def call_header(opened: Any, *, sender: str, subject: str, accepted_on: date) -> str:
-    opened.execute(HEADER_CALL, (FACTORY, accepted_on, ACCEPT_CODE, sender, subject))
+def call_header(opened: Any, header: str, *, sender: str, subject: str, accepted_on: date) -> str:
+    statement, params = bind(header, {"acpt_dt": accepted_on, "sender": sender, "subject": subject})
+    opened.execute(statement, params)
     row = opened.fetchone()
     if not row:
-        raise ErpError(f"{HEADER_PROCEDURE} 가 응답하지 않았습니다")
+        raise ErpError("등록 프로시저가 응답하지 않았습니다")
 
     result, message = answered(row)
     if result != HEADER_OK:
-        raise ErpError(f"{HEADER_PROCEDURE} 등록 실패: {message or '사유 없음'}")
+        raise ErpError(f"ERP 등록 실패: {message or '사유 없음'}")
     if not message:
-        raise ErpError(f"{HEADER_PROCEDURE} 응답에 mail_no 가 없습니다")
+        raise ErpError("ERP 등록 응답에 mail_no 가 없습니다")
     return message
 
 
@@ -136,23 +147,25 @@ def register(
     *,
     sender: str,
     subject: str,
+    target: Target,
     accepted_on: date | None = None,
-    endpoint: DbEndpoint | None = None,
 ) -> str:
     unpack_archives(folder)
     placed = slotted(folder)
     if not placed:
         raise ErpError(f"등록할 파일이 없습니다: {folder}")
 
-    with cursor(endpoint, autocommit=False) as opened:
+    with cursor(target.endpoint, autocommit=False) as opened:
         document_no = call_header(
             opened,
+            target.header,
             sender=sender,
             subject=subject or folder.name,
             accepted_on=accepted_on or date.today(),
         )
+        insert = file_insert(target.file_table)
         for slot, path in placed:
-            opened.execute(FILE_INSERT, file_row(document_no, slot, path))
+            opened.execute(insert, file_row(document_no, slot, path))
 
     logger.info("      ERP 등록 mail_no=%s (파일 %d건)", document_no, len(placed))
     return document_no

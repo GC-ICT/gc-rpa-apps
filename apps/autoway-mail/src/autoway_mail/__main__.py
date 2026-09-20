@@ -4,7 +4,7 @@ import logging
 import sys
 import time
 
-from autoway_mail import common, history, inbox, mail
+from autoway_mail import common, erp, history, inbox, mail
 from gc_rpa_core import hub
 from gc_rpa_core.browser import chrome, clean_up_browsers_on_exit
 from gc_rpa_core.env import optional_env
@@ -41,6 +41,12 @@ def main() -> int:
             complaint = common.poppler_complaint()
             if complaint:
                 logger.warning("      %s", complaint)
+            erp_target = erp.target(common.erp_database(settings))
+            logger.info(
+                "      ERP 등록 %s / %s",
+                erp_target.endpoint.database,
+                erp_target.file_table,
+            )
             workspace = common.workspace(settings)
             downloads = common.download_dir(settings)
             logger.info("[2/3] 받은편지함   %s", workspace)
@@ -59,6 +65,7 @@ def main() -> int:
                 session = mail.Session(
                     driver=driver,
                     settings=settings,
+                    erp_target=erp_target,
                     workspace=workspace,
                     downloads=downloads,
                     store=store,

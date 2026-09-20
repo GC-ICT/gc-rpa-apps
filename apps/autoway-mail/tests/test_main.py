@@ -7,7 +7,18 @@ import pytest
 
 from autoway_mail import __main__ as entry
 from autoway_mail import common, inbox, mail
-from gc_rpa_core.config import RpaConfig
+from gc_rpa_core.config import RpaConfig, RpaDatabase
+from gc_rpa_core.db import DbEndpoint
+
+
+def erp_database() -> RpaDatabase:
+    return RpaDatabase(
+        name="ERP",
+        source=DbEndpoint("test-erp.invalid", None, "ERP", "user", "pw"),
+        target=DbEndpoint("", None, "", "", ""),
+        tables=("[ERPFileDB].[dbo].[HRA700_File]",),
+        queries=("EXEC [ERP].[dbo].[HRA700_Work] @_send_cust = {sender}",),
+    )
 
 
 def _hub(sent: dict[str, Any]) -> Any:
@@ -45,6 +56,7 @@ def quiet_browser(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(entry, "chrome", fake_chrome)
     monkeypatch.setattr(common, "login", lambda *_a: None)
     monkeypatch.setattr(inbox, "open_module", lambda *_a: None)
+    monkeypatch.setattr(common, "erp_database", lambda _settings: erp_database())
 
 
 def test_main_reports_the_tally(

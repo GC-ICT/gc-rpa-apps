@@ -72,6 +72,7 @@ class Tally:
 class Session:
     driver: WebDriver
     settings: config.RpaConfig
+    erp_target: erp.Target
     workspace: Path
     downloads: Path
     store: history.History
@@ -173,7 +174,7 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
             folder,
             sender=listing.sender,
             subject=inbox.clean_text(listing.subject),
-            endpoint=session.settings.source,
+            target=session.erp_target,
         )
         if listing.key:
             session.store.mark_registered(listing.key, document_no)

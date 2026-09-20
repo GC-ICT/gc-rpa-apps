@@ -7,6 +7,7 @@ from autoway_mail import capture, erp, history, inbox, mail
 from autoway_mail.inbox import Listing
 from autoway_mail.mail import Outcome, Session, Step, StepError, Tally
 from gc_rpa_core.browser import RendererHangError
+from gc_rpa_core.db import DbEndpoint
 
 
 class FakeDriver:
@@ -26,6 +27,14 @@ def listing(key: str = "m1", subject: str = "제목", **fields: str) -> Listing:
     )
 
 
+def erp_target() -> erp.Target:
+    return erp.Target(
+        endpoint=DbEndpoint("test-erp.invalid", None, "ERP", "user", "pw"),
+        header="EXEC [ERP].[dbo].[HRA700_Work] @_send_cust = {sender}",
+        file_table="[ERPFileDB].[dbo].[HRA700_File]",
+    )
+
+
 @pytest.fixture
 def session(tmp_path: Path, rpa_settings: Any) -> Session:
     store = history.History(tmp_path / "history.db")
@@ -34,6 +43,7 @@ def session(tmp_path: Path, rpa_settings: Any) -> Session:
     return Session(
         driver=FakeDriver(),  # type: ignore[arg-type]
         settings=rpa_settings,
+        erp_target=erp_target(),
         workspace=tmp_path,
         downloads=downloads,
         store=store,

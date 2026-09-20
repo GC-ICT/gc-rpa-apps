@@ -48,6 +48,20 @@ def load() -> config.RpaConfig:
     return config.load(schedule_id())
 
 
+def erp_database(settings: config.RpaConfig) -> config.RpaDatabase:
+    filled = [
+        database
+        for database in config.load_databases(settings.actprg_id)
+        if database.queries and database.source.configured
+    ]
+    if not filled:
+        raise LookupError(
+            f"{config.PROCEDURE} 의 actprg_id={settings.actprg_id} 에 "
+            "등록 프로시저 실행문이 있는 DB 가 없습니다"
+        )
+    return filled[0]
+
+
 def workspace(settings: config.RpaConfig) -> Path:
     if not settings.move_path.strip():
         raise WorkspaceError(

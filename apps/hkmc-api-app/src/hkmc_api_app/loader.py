@@ -11,6 +11,7 @@ from typing import Any
 
 from gc_rpa_core.config import RpaDatabase
 from gc_rpa_core.db import DbEndpoint, connect
+from gc_rpa_core.statement import bind
 from hkmc_api_app.common import Api, outdata, succeeded
 
 DATABASE = "IT_Info"
@@ -267,10 +268,7 @@ def load_rows(
 
 
 def bound(query: str, run_dt: date) -> tuple[str, tuple[Any, ...]]:
-    wanted = query.count(RUN_DT)
-    if not wanted:
-        return query, ()
-    return query.replace(RUN_DT, "%s"), (run_dt,) * wanted
+    return bind(query, {"run_dt": run_dt})
 
 
 def run_queries(writer: Writer, run_dt: date) -> int:
