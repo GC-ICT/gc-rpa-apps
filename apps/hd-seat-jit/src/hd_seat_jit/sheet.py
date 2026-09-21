@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -80,35 +80,36 @@ def squeezed(value: Any) -> str:
 
 
 def header_columns(worksheet: Any) -> dict[str, int]:
-    found = {
-        squeezed(worksheet.cell(HEADER_ROW, column).value): column
-        for column in range(1, worksheet.max_column + 1)
+    labels = {
+        squeezed(worksheet.cell(HEADER_ROW, where).value): where
+        for where in range(1, worksheet.max_column + 1)
     }
     placed = {}
     for column in COLUMNS:
-        at = found.get(squeezed(column.label))
-        if at is None:
+        where = labels.get(squeezed(column.label))
+        if where is None:
             raise SheetError(f"{HEADER_ROW}행에 '{column.label}' 열이 없습니다")
-        placed[column.name] = at
+        placed[column.name] = where
     return placed
+
+
+def body_values(worksheet: Any) -> Iterator[tuple[Any, ...]]:
+    placed = header_columns(worksheet)
+    for row in range(HEADER_ROW + 1, worksheet.max_row + 1):
+        values = tuple(
+            column.read(worksheet.cell(row, placed[column.name]).value) for column in COLUMNS
+        )
+        if values[0]:
+            yield values
 
 
 def read(path: Path, *, customer_code: str) -> Sheet:
     workbook = load_workbook(path, data_only=True)
     try:
         worksheet = workbook.worksheets[0]
-        placed = header_columns(worksheet)
         common = {name: text(worksheet[cell].value) for name, cell in COMMON_CELLS}
         trailing = (*(common[name] for name, _ in COMMON_CELLS), customer_code)
-
-        rows = []
-        for index in range(HEADER_ROW + 1, worksheet.max_row + 1):
-            values = tuple(
-                column.read(worksheet.cell(index, placed[column.name]).value) for column in COLUMNS
-            )
-            if not values[0]:
-                continue
-            rows.append((*values, *trailing))
+        rows = [(*values, *trailing) for values in body_values(worksheet)]
     finally:
         workbook.close()
 

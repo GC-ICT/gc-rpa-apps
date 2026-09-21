@@ -5,7 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 
 from gc_rpa_core import config
-from gc_rpa_core.browser import accept_alert, click, fill, wait_ready
+from gc_rpa_core.browser import accept_alert, click, click_if_shown, fill, wait_ready
 
 USER_ID_INPUT = ":r1:"
 PASSWORD_INPUT = ":r2:"
@@ -22,20 +22,10 @@ class LoginError(RuntimeError):
     pass
 
 
-def close_if_shown(driver: WebDriver, by: str, locator: str) -> None:
-    for element in driver.find_elements(by, locator):
-        try:
-            if not element.is_displayed():
-                continue
-            element.click()
-        except Exception:
-            driver.execute_script("arguments[0].click();", element)
-
-
 def login(driver: WebDriver, settings: config.RpaConfig) -> None:
     driver.get(settings.url)
     wait_ready(driver)
-    close_if_shown(driver, By.CSS_SELECTOR, NOTICE_CLOSE)
+    click_if_shown(driver, By.CSS_SELECTOR, NOTICE_CLOSE)
 
     try:
         fill(driver, By.ID, USER_ID_INPUT, settings.user_id)
@@ -46,4 +36,4 @@ def login(driver: WebDriver, settings: config.RpaConfig) -> None:
 
     accept_alert(driver)
     for locator in DIALOG_CLOSE:
-        close_if_shown(driver, By.XPATH, locator)
+        click_if_shown(driver, By.XPATH, locator)

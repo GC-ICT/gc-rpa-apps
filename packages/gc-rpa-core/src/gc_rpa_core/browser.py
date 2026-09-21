@@ -223,6 +223,19 @@ def fill(
     return element
 
 
+def click_if_shown(driver: WebDriver, by: str, locator: str) -> int:
+    pressed = 0
+    for element in driver.find_elements(by, locator):
+        try:
+            if not element.is_displayed():
+                continue
+            element.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", element)
+        pressed += 1
+    return pressed
+
+
 def accept_alert(driver: WebDriver, *, timeout: float = ALERT_TIMEOUT) -> bool:
     try:
         WebDriverWait(driver, timeout).until(ec.alert_is_present())

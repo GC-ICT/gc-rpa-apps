@@ -41,7 +41,7 @@ def target(settings: config.RpaConfig) -> Target:
     )
 
 
-def downloaded(folder: Path) -> list[Path]:
+def workbooks(folder: Path) -> list[Path]:
     unreadable = sorted(path.name for path in folder.rglob(f"*{UNREADABLE_SUFFIX}"))
     if unreadable:
         raise LoaderError(f"{EXCEL_SUFFIX} 가 아니라 읽을 수 없습니다: {', '.join(unreadable)}")
@@ -62,15 +62,15 @@ def clear(folder: Path) -> int:
 
 
 def parsed(folder: Path, *, customer_code: str) -> list[sheet.Sheet]:
-    read = []
-    for path in downloaded(folder):
+    pages = []
+    for path in workbooks(folder):
         try:
             page = sheet.read(path, customer_code=customer_code)
         except Exception as exc:
             raise LoaderError(f"{path.name} 을 읽지 못했습니다: {exc}") from exc
         logger.info("      %s %d행 %s", path.name, len(page.rows), page.common)
-        read.append(page)
-    return read
+        pages.append(page)
+    return pages
 
 
 def rows_of(pages: Sequence[sheet.Sheet]) -> list[tuple[Any, ...]]:
@@ -109,17 +109,18 @@ def finish(target: Target) -> int:
     return len(target.queries)
 
 
-def discard(paths: Sequence[Path]) -> int:
-    removed = 0
-    for path in paths:
-        for attempt in range(DELETE_ATTEMPTS):
-            try:
-                path.unlink(missing_ok=True)
-                removed += 1
-                break
-            except OSError as exc:
-                if attempt + 1 == DELETE_ATTEMPTS:
-                    logger.warning("      %s 를 지우지 못했습니다: %s", path.name, exc)
-                    break
+def thrown_away(path: Path) -> bool:
+    for attempt in range(DELETE_ATTEMPTS):
+        try:
+            path.unlink(missing_ok=True)
+            return True
+        except OSError as exc:
+            if attempt + 1 == DELETE_ATTEMPTS:
+                logger.warning("      %s 를 지우지 못했습니다: %s", path.name, exc)
+            else:
                 time.sleep(DELETE_PAUSE)
-    return removed
+    return False
+
+
+def discard(paths: Sequence[Path]) -> int:
+    return sum(thrown_away(path) for path in paths)

@@ -46,9 +46,10 @@ class FakeDriver:
 def quiet(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     pressed: list[tuple[str, str]] = []
     monkeypatch.setattr(vpn, "click", lambda _d, by, what: pressed.append((by, what)))
+    monkeypatch.setattr(vpn, "click_if_shown", lambda *_a: 0)
     monkeypatch.setattr(vpn, "fill", lambda _d, by, what, _v: pressed.append((by, what)))
     monkeypatch.setattr(vpn, "wait_ready", lambda *_a, **_k: None)
-    monkeypatch.setattr(vpn, "confirm_native_dialog", lambda: None)
+    monkeypatch.setattr(vpn, "allow_native_app", lambda: None)
     monkeypatch.setattr(vpn.time, "sleep", lambda _s: None)
     return pressed
 
@@ -104,7 +105,7 @@ def test_the_login_form_is_filled_then_extra_windows_closed(quiet: Any) -> None:
 
     vpn.sign_in(driver, settings())
 
-    assert [what for _, what in quiet] == [vpn.ID_INPUT, vpn.PASSWORD_INPUT, vpn.LOGIN_BUTTON]
+    assert [what for _, what in quiet] == [vpn.ID_INPUT, vpn.PASSWORD_INPUT, vpn.SUBMIT_BUTTON]
     assert driver.closed == ["popup"]
     assert driver.focused == "main"
 
@@ -112,7 +113,7 @@ def test_the_login_form_is_filled_then_extra_windows_closed(quiet: Any) -> None:
 def test_the_code_goes_into_the_password_box(quiet: Any) -> None:
     vpn.submit_code(FakeDriver(), "483920")
 
-    assert [what for _, what in quiet] == [vpn.PASSWORD_INPUT, vpn.LOGIN_BUTTON]
+    assert [what for _, what in quiet] == [vpn.PASSWORD_INPUT, vpn.SUBMIT_BUTTON]
 
 
 def test_a_client_that_never_starts_is_an_error(
@@ -123,8 +124,8 @@ def test_a_client_that_never_starts_is_an_error(
     monkeypatch.setattr(vpn.config, "load", lambda _id: settings())
 
     class FakeBox:
-        def arrived(self) -> int:
-            return 0
+        def mark(self) -> None:
+            return None
 
         def read(self, **_k: Any) -> str:
             return "483920"

@@ -99,7 +99,7 @@ def change_password(driver: WebDriver, current: str, fresh: str) -> None:
     wait_ready(driver)
 
 
-def renewed(driver: WebDriver, settings: config.RpaConfig, schedule_id: str) -> str:
+def renew_password(driver: WebDriver, settings: config.RpaConfig, schedule_id: str) -> str:
     fresh = bumped(settings.password)
     change_password(driver, settings.password, fresh)
     config.save_password(schedule_id, fresh)
@@ -111,8 +111,9 @@ def renewed(driver: WebDriver, settings: config.RpaConfig, schedule_id: str) -> 
 class Mailbox:
     driver: WebDriver
     profile: Profile
+    seen: int = 0
 
-    def arrived(self) -> int:
+    def listed(self) -> int:
         self.driver.switch_to.default_content()
         click(self.driver, By.XPATH, MAIL_MENU)
         wait_ready(self.driver)
@@ -134,9 +135,12 @@ class Mailbox:
             raise OtpError(f"'{self.profile.subject}' 본문에서 번호를 찾지 못했습니다")
         return code.group(1)
 
-    def read(self, *, seen: int, timeout: float = ARRIVAL_TIMEOUT) -> str:
+    def mark(self) -> None:
+        self.seen = self.listed()
+
+    def read(self, *, timeout: float = ARRIVAL_TIMEOUT) -> str:
         deadline = time.monotonic() + timeout
-        while self.arrived() <= seen:
+        while self.listed() <= self.seen:
             if time.monotonic() >= deadline:
                 raise OtpError(f"OTP 메일이 {timeout:.0f}초 안에 오지 않았습니다")
             time.sleep(ARRIVAL_PAUSE)
@@ -150,7 +154,7 @@ def mailbox(schedule_id: str, profile: Profile, *, downloads: Path) -> Iterator[
         sign_in(driver, settings, settings.password)
         if on_change_page(driver):
             logger.info("      하이웍스가 비밀번호 변경을 요구합니다")
-            fresh = renewed(driver, settings, schedule_id)
+            fresh = renew_password(driver, settings, schedule_id)
             if not signed_in_already(driver):
                 sign_in(driver, settings, fresh)
         yield Mailbox(driver=driver, profile=profile)

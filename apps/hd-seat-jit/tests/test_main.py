@@ -53,9 +53,9 @@ def whole_run(
     def fake_chrome(*_a: Any, **_k: Any) -> Iterator[object]:
         yield object()
 
-    def fake_sweep(_driver: Any, _settings: Any, *, plants: Any, downloads: Path) -> list[Path]:
+    def fake_sweep(_driver: Any, _settings: Any, *, plants: Any, folder: Path) -> list[Path]:
         done["plants"] = tuple(plants)
-        return [workbook(downloads / f"{plant}.xlsx") for plant in plants]
+        return [workbook(folder / f"{plant}.xlsx") for plant in plants]
 
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
     monkeypatch.setattr(loader, "target", lambda _settings: TARGET)
@@ -137,8 +137,8 @@ def test_a_workbook_that_cannot_be_read_stops_the_load(
 ) -> None:
     sent: dict[str, Any] = {}
 
-    def half_broken(_driver: Any, _settings: Any, *, plants: Any, downloads: Path) -> list[Path]:
-        broken = downloads / "broken.xlsx"
+    def half_broken(_driver: Any, _settings: Any, *, plants: Any, folder: Path) -> list[Path]:
+        broken = folder / "broken.xlsx"
         broken.parent.mkdir(parents=True, exist_ok=True)
         broken.write_bytes(b"not a workbook")
         return [broken]

@@ -52,7 +52,7 @@ def test_the_target_comes_from_the_procedure(monkeypatch: pytest.MonkeyPatch) ->
     assert built.queries == ("EXEC SDB500_WORK", "EXEC SDB500_AFTER")
 
 
-def test_downloaded_files_come_back_oldest_first(tmp_path: Path) -> None:
+def test_workbooks_come_back_oldest_first(tmp_path: Path) -> None:
     import os
 
     first, second = tmp_path / "a.xlsx", tmp_path / "b.xlsx"
@@ -61,12 +61,12 @@ def test_downloaded_files_come_back_oldest_first(tmp_path: Path) -> None:
     os.utime(first, (1, 1))
     os.utime(second, (2, 2))
 
-    assert loader.downloaded(tmp_path) == [first, second]
+    assert loader.workbooks(tmp_path) == [first, second]
 
 
 def test_an_empty_folder_is_refused(tmp_path: Path) -> None:
     with pytest.raises(loader.LoaderError, match="받은 엑셀이 없습니다"):
-        loader.downloaded(tmp_path)
+        loader.workbooks(tmp_path)
 
 
 def test_an_old_format_workbook_stops_the_run(tmp_path: Path) -> None:
@@ -74,7 +74,7 @@ def test_an_old_format_workbook_stops_the_run(tmp_path: Path) -> None:
     (tmp_path / "old.xls").write_bytes(b"")
 
     with pytest.raises(loader.LoaderError, match=r"old\.xls"):
-        loader.downloaded(tmp_path)
+        loader.workbooks(tmp_path)
 
 
 def test_every_workbook_is_parsed_into_one_pile(

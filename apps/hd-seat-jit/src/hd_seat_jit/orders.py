@@ -66,11 +66,15 @@ def open_menu(driver: WebDriver) -> None:
     enter_body(driver)
 
 
-def open_list(driver: WebDriver, plant: str) -> None:
+def choose_plant(driver: WebDriver, plant: str) -> None:
     enter_body(driver)
     if not driver.execute_script(CHOOSE_PLANT, PLANT_SELECT, plant):
         raise OrderError(f"{plant}공장 선택 상자를 찾지 못했습니다")
     wait_ready(driver)
+
+
+def open_list(driver: WebDriver, plant: str) -> None:
+    choose_plant(driver, plant)
     enter_body(driver)
 
 
@@ -83,25 +87,29 @@ def job_ids(driver: WebDriver) -> list[str]:
     return sorted(found, reverse=True)
 
 
-def assembly_jobs(driver: WebDriver) -> list[str]:
-    lines = len(driver.find_elements(By.XPATH, ASSEMBLY_ITEM))
+def assembly_lines(driver: WebDriver) -> int:
+    return len(driver.find_elements(By.XPATH, ASSEMBLY_ITEM))
+
+
+def wanted_jobs(driver: WebDriver) -> list[str]:
+    lines = assembly_lines(driver)
     found = job_ids(driver)
     if lines > len(found):
         logger.warning("      조립 %d줄인데 작업지시 링크는 %d개뿐입니다", lines, len(found))
     return found[:lines]
 
 
-def fetch(driver: WebDriver, job: str, downloads: Path) -> Path:
-    before = settled_files(downloads)
+def fetch(driver: WebDriver, job: str, folder: Path) -> Path:
+    before = settled_files(folder)
     click(driver, By.XPATH, f"//a[contains(@href, '{job}')]")
     wait_ready(driver)
     click(driver, By.ID, EXCEL_BUTTON)
-    return wait_download(downloads, before=before)
+    return wait_download(folder, before=before)
 
 
-def sweep(driver: WebDriver, plant: str, downloads: Path) -> list[Path]:
+def sweep(driver: WebDriver, plant: str, folder: Path) -> list[Path]:
     open_list(driver, plant)
-    jobs = assembly_jobs(driver)
+    jobs = wanted_jobs(driver)
     if not jobs:
         logger.info("      %s공장 조립 작업이 없습니다", plant)
         return []
@@ -110,7 +118,7 @@ def sweep(driver: WebDriver, plant: str, downloads: Path) -> list[Path]:
     for job in jobs:
         open_list(driver, plant)
         logger.info("      %s공장 %s", plant, job)
-        taken.append(fetch(driver, job, downloads))
+        taken.append(fetch(driver, job, folder))
     return taken
 
 
@@ -119,14 +127,14 @@ def run(
     settings: config.RpaConfig,
     *,
     plants: Sequence[str],
-    downloads: Path,
+    folder: Path,
 ) -> list[Path]:
     login(driver, settings)
     open_menu(driver)
 
     taken: list[Path] = []
     for plant in plants:
-        got = sweep(driver, plant, downloads)
+        got = sweep(driver, plant, folder)
         logger.info("      %s공장 %d건 받았습니다", plant, len(got))
         taken.extend(got)
     return taken

@@ -98,16 +98,18 @@ def test_the_mail_main_page_counts_as_signed_in() -> None:
 def test_a_mail_that_was_already_there_is_not_taken(quiet: None) -> None:
     driver = FakeDriver([1], body="OTP : [ 111111 ]")
     box = otp.Mailbox(driver=driver, profile=otp.VPN)
+    box.mark()
 
     with pytest.raises(otp.OtpError, match="오지 않았습니다"):
-        box.read(seen=1, timeout=0)
+        box.read(timeout=0)
 
 
 def test_a_mail_that_arrives_late_is_still_read(quiet: None) -> None:
     driver = FakeDriver([0, 0, 1], body="OTP : [ 483920 ]")
     box = otp.Mailbox(driver=driver, profile=otp.VPN)
+    box.mark()
 
-    assert box.read(seen=0) == "483920"
+    assert box.read() == "483920"
 
 
 def test_the_body_is_read_inside_the_view_frame(quiet: None) -> None:

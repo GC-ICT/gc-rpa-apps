@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -155,3 +156,48 @@ def test_move_to_works_across_filesystems(tmp_path: Path, monkeypatch: pytest.Mo
 
     assert moved.read_text() == "내용"
     assert not downloaded.exists()
+
+
+class Shown:
+    def __init__(self, shown: bool = True, stubborn: bool = False) -> None:
+        self.shown = shown
+        self.stubborn = stubborn
+        self.clicked = False
+
+    def is_displayed(self) -> bool:
+        return self.shown
+
+    def click(self) -> None:
+        if self.stubborn:
+            raise RuntimeError("가려져 있습니다")
+        self.clicked = True
+
+
+class Page:
+    def __init__(self, elements: list[Shown]) -> None:
+        self.elements = elements
+        self.scripted: list[Any] = []
+
+    def find_elements(self, by: str, locator: str) -> list[Shown]:
+        return self.elements
+
+    def execute_script(self, script: str, *args: Any) -> None:
+        self.scripted.append(args)
+
+
+def test_click_if_shown_presses_what_is_visible() -> None:
+    page = Page([Shown(), Shown(shown=False), Shown()])
+
+    assert browser.click_if_shown(page, "css", "button") == 2
+    assert [element.clicked for element in page.elements] == [True, False, True]
+
+
+def test_click_if_shown_falls_back_to_a_script_click() -> None:
+    page = Page([Shown(stubborn=True)])
+
+    assert browser.click_if_shown(page, "css", "button") == 1
+    assert page.scripted
+
+
+def test_click_if_shown_is_quiet_when_nothing_is_there() -> None:
+    assert browser.click_if_shown(Page([]), "css", "button") == 0

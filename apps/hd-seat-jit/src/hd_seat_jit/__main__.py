@@ -50,7 +50,7 @@ def main() -> int:
 
             logger.info("[3/%d] 작업지시서", STEPS)
             with chrome(settings.url, download_dir=downloads, headless=common.headless()) as driver:
-                taken = orders.run(driver, settings, plants=common.PLANTS, downloads=downloads)
+                taken = orders.run(driver, settings, plants=common.PLANTS, folder=downloads)
             report(f"작업지시서 {len(taken)}건 받았습니다")
 
             logger.info("[4/%d] 적재", STEPS)

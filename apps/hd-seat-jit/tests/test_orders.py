@@ -101,7 +101,7 @@ def test_only_as_many_jobs_as_assembly_lines_are_taken() -> None:
     driver = FakeDriver({"1": ["20260921-001", "20260921-002", "20260921-003"]}, assembly={"1": 2})
     driver.plant = "1"
 
-    assert orders.assembly_jobs(driver) == ["20260921-003", "20260921-002"]
+    assert orders.wanted_jobs(driver) == ["20260921-003", "20260921-002"]
 
 
 def test_fewer_links_than_assembly_lines_is_a_warning_not_a_crash(
@@ -111,7 +111,7 @@ def test_fewer_links_than_assembly_lines_is_a_warning_not_a_crash(
     driver.plant = "1"
 
     with caplog.at_level("WARNING", logger=orders.__name__):
-        assert orders.assembly_jobs(driver) == ["20260921-001"]
+        assert orders.wanted_jobs(driver) == ["20260921-001"]
 
     assert "3줄" in caplog.text
 
@@ -135,7 +135,7 @@ def test_the_list_is_reopened_before_every_download(quiet: Any, tmp_path: Path) 
 def test_every_plant_is_swept(quiet: Any, tmp_path: Path) -> None:
     driver = FakeDriver({"1": ["20260921-001"], "2": [], "3": ["20260921-007"]})
 
-    taken = orders.run(driver, settings(), plants=("1", "2", "3"), downloads=tmp_path)
+    taken = orders.run(driver, settings(), plants=("1", "2", "3"), folder=tmp_path)
 
     assert len(taken) == 2
 
