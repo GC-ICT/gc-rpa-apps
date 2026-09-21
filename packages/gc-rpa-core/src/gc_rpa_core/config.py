@@ -117,8 +117,8 @@ def usable_database(settings: RpaConfig) -> RpaDatabase:
     filled = next((database for database in databases if not database.complaint), None)
     if filled is None:
         raise LookupError(
-            f"{PROCEDURE} 의 actprg_id={settings.actprg_id} 에 "
-            f"쓸 수 있는 DB 가 없습니다: {databases[0].complaint}"
+            f"{PROCEDURE} 의 actprg_id={settings.actprg_id} 에 쓸 수 있는 DB 가 없습니다 "
+            f"({len(databases)}행): " + " / ".join(database.complaint for database in databases)
         )
     return filled
 

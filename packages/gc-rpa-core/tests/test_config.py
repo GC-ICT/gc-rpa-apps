@@ -274,3 +274,18 @@ def test_usable_database_complains_when_every_row_is_short(
 
     with pytest.raises(LookupError, match="act_query"):
         config.usable_database(rpa_settings())
+
+
+def test_usable_database_names_every_row_it_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = (
+        rpa_database(name="2607070001", tables=()),
+        rpa_database(name="ERP", queries=()),
+    )
+    monkeypatch.setattr(config, "load_databases", lambda _: rows)
+
+    with pytest.raises(LookupError) as refused:
+        config.usable_database(rpa_settings())
+
+    assert "2행" in str(refused.value)
+    assert "2607070001" in str(refused.value)
+    assert "ERP" in str(refused.value)
