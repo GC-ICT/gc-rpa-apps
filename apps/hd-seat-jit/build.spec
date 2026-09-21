@@ -52,6 +52,7 @@ a = Analysis(
         "hd_seat_jit",
         "hd_seat_jit.common",
         "hd_seat_jit.loader",
+        "hd_seat_jit.orders",
         "hd_seat_jit.sheet",
         "gc_rpa_core",
     ],
