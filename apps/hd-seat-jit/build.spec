@@ -13,7 +13,7 @@ if env_file.is_file():
 else:
     print("[build.spec] .env 가 없어 실행파일에 포함하지 않습니다.")
 
-for package in ("pymssql", "pysignalr", "dotenv", "selenium", "openpyxl"):
+for package in ("pymssql", "pysignalr", "dotenv", "selenium", "openpyxl", "pyautogui"):
     package_datas, package_binaries, package_hidden = collect_all(package)
     datas += package_datas
     binaries += package_binaries
@@ -53,6 +53,7 @@ a = Analysis(
         "hd_seat_jit.common",
         "hd_seat_jit.loader",
         "hd_seat_jit.orders",
+        "hd_seat_jit.vpn",
         "hd_seat_jit.sheet",
         "gc_rpa_core",
     ],

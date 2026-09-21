@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "gc-rpa-core",
     "openpyxl>=3.1",
+    "pyautogui>=0.9.54",
     "selenium>=4.27",
 ]
 

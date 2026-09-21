@@ -8,8 +8,10 @@ from gc_rpa_core.db import DbEndpoint, cursor
 PROCEDURE = "ITM250_Schedule"
 SELECT_TYPE = "GetActProgram"
 DATABASE_SELECT_TYPE = "GetActDatabase"
+PASSWORD_SELECT_TYPE = "SetRpaPassword"
 CALL = f"EXEC {PROCEDURE} @_Select_type = %s, @_schedule_id = %s"
 DATABASE_CALL = f"EXEC {PROCEDURE} @_Select_type = %s, @_actprg_id = %s"
+PASSWORD_CALL = f"EXEC {PROCEDURE} @_Select_type = %s, @_schedule_id = %s, @_rpa_pw = %s"
 
 TRUE_FLAGS = ("Y", "1", "T", "TRUE")
 TABLE_SEPARATOR = ","
@@ -103,6 +105,11 @@ def load(schedule_id: str) -> RpaConfig:
         target=endpoint(row, "target"),
         actprg_id=text(row, "actprg_id"),
     )
+
+
+def save_password(schedule_id: str, password: str) -> None:
+    with cursor(autocommit=True) as opened:
+        opened.execute(PASSWORD_CALL, (PASSWORD_SELECT_TYPE, schedule_id, password))
 
 
 def usable_database(settings: RpaConfig) -> RpaDatabase:
