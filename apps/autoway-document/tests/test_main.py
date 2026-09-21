@@ -56,7 +56,6 @@ def quiet_browser(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(entry, "chrome", fake_chrome)
     monkeypatch.setattr(site, "login", lambda *_a: None)
-    monkeypatch.setattr(config, "usable_database", lambda _settings: erp_database())
     monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: None)
 
 
@@ -72,19 +71,20 @@ def test_main_logs_in_and_reports(
     assert "failed" not in sent
 
 
-def test_main_names_the_erp_target(
-    monkeypatch: pytest.MonkeyPatch,
-    quiet_browser: None,
-    rpa_settings: RpaConfig,
-    caplog: pytest.LogCaptureFixture,
+def test_the_run_does_not_need_an_erp_database(
+    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig
 ) -> None:
+    sent: dict[str, Any] = {}
+
+    def missing(_settings: RpaConfig) -> RpaDatabase:
+        raise LookupError("쓸 수 있는 DB 가 없습니다")
+
+    monkeypatch.setattr(config, "usable_database", missing)
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
-    monkeypatch.setattr(app.hub, "session", _hub({}))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
 
-    with caplog.at_level("INFO", logger=entry.FALLBACK_SYSTEM):
-        entry.main()
-
-    assert "[ERPFileDB].[dbo].[HRA600_F]" in caplog.text
+    assert entry.main() == 0
+    assert "failed" not in sent
 
 
 def test_main_reports_a_failure(
