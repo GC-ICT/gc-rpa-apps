@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gc_rpa_autoway.files import workspace
 from gc_rpa_core import config
 from gc_rpa_core.env import optional_env
+from gc_rpa_core.workspace import workspace
 
 SCHEDULE_ID_ENV = "AUTOWAY_MAIL_SCHEDULE_ID"
 DEFAULT_SCHEDULE_ID = "5"

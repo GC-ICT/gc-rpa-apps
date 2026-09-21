@@ -5,8 +5,9 @@ import sys
 import time
 
 from autoway_mail import common, history, inbox, mail
-from gc_rpa_autoway import erp, files, site
+from gc_rpa_autoway import erp, poppler, site
 from gc_rpa_core import config, hub
+from gc_rpa_core import workspace as folders
 from gc_rpa_core.browser import chrome, clean_up_browsers_on_exit
 from gc_rpa_core.report import describe_error, print_banner, start_logging
 
@@ -16,7 +17,7 @@ logger = logging.getLogger(FALLBACK_SYSTEM)
 
 
 def warn_about_poppler() -> None:
-    complaint = files.poppler_complaint()
+    complaint = poppler.complaint()
     if complaint:
         logger.warning("      %s", complaint)
 
@@ -54,8 +55,8 @@ def main() -> int:
 
             warn_about_poppler()
             target = erp_target(settings)
-            workspace = files.workspace(settings)
-            downloads = files.download_dir(settings)
+            workspace = folders.workspace(settings)
+            downloads = folders.download_dir(settings)
             logger.info("[2/3] 받은편지함   %s", workspace)
 
             with (

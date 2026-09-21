@@ -53,7 +53,7 @@ a = Analysis(
         "autoway_document.common",
         "gc_rpa_autoway",
         "gc_rpa_autoway.erp",
-        "gc_rpa_autoway.files",
+        "gc_rpa_autoway.poppler",
         "gc_rpa_autoway.site",
         "gc_rpa_core",
     ],
