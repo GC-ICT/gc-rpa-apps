@@ -51,6 +51,7 @@ a = Analysis(
     + [
         "hd_seat_jit",
         "hd_seat_jit.common",
+        "hd_seat_jit.sheet",
         "gc_rpa_core",
     ],
     excludes=["tkinter", "pytest", "mypy", "ruff", "IPython"],
