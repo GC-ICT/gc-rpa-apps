@@ -176,6 +176,26 @@ def test_a_pane_without_a_display_name_keeps_the_address() -> None:
     assert found.sender == "a@b.c"
 
 
+def test_the_pane_address_does_not_replace_the_display_name() -> None:
+    found = listing(subject="제목", received_at="202609170930", sender_name="보낸이")
+
+    assert not inbox.fill_missing(pane(sender="a@b.c"), found)
+    assert found.sender == "보낸이"
+
+
+def test_the_pane_keeps_the_display_name_it_shows_beside_the_address() -> None:
+    found = listing(subject="제목", received_at="202609170930", sender_mail="a@b.c")
+
+    assert inbox.fill_missing(pane(sender="보낸이 <a@b.c>"), found)
+    assert found.sender == "보낸이"
+
+
+def test_a_row_showing_only_an_address_is_not_a_display_name() -> None:
+    element = FakeElement({"messageid": "m1", "sendermail": "a@b.c"}, sender="a@b.c")
+
+    assert inbox.read_listing(element).sender_name == ""  # type: ignore[arg-type]
+
+
 def test_a_complete_listing_is_left_alone() -> None:
     found = listing(subject="제목", received_at="202609170930", sender_name="보낸이")
 

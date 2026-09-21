@@ -32,6 +32,7 @@ ALERT_OVERLAY = "alert_overlay"
 EXPORT_POPUP_CLOSE = "divMsgExportPop_px"
 ERP_FOLDER = "ERP 접수함"
 SECURITY_NOTIFY_TYPE = "SECURITYMAIL"
+ADDRESS_IN_NAME = re.compile(r"<[^<>]*@[^<>]*>")
 
 LIST_ATTRIBUTES = {
     "message_id": "messageid",
@@ -110,6 +111,11 @@ class FrameSearch:
 
     def describe(self) -> str:
         return ", ".join(f"{kind} {count}개" for kind, count in self.searched.items())
+
+
+def display_name(value: str) -> str:
+    text = ADDRESS_IN_NAME.sub("", value or "").strip().strip('"').strip()
+    return "" if "@" in text else text
 
 
 def clean_text(value: str) -> str:
@@ -281,7 +287,7 @@ def read_listing(element: WebElement) -> Listing:
     for name, attribute in LIST_ATTRIBUTES.items():
         setattr(listing, name, checkbox.get_attribute(attribute) or "")
     try:
-        listing.sender_name = element.find_element(By.CSS_SELECTOR, SENDER_NAME).text
+        listing.sender_name = display_name(element.find_element(By.CSS_SELECTOR, SENDER_NAME).text)
     except NoSuchElementException:
         listing.sender_name = ""
     return listing
@@ -304,8 +310,8 @@ def fill_missing(driver: WebDriver, listing: Listing) -> bool:
         filled = True
 
     shown = here_or_none(driver, By.CSS_SELECTOR, READ_SENDER)
-    name = shown.text.strip() if shown is not None else ""
-    if name and name != listing.sender_name:
+    name = display_name(shown.text) if shown is not None else ""
+    if name and not listing.sender_name:
         listing.sender_name = name
         filled = True
     return filled
