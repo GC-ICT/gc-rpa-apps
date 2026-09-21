@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from gc_rpa_core import app
 from gc_rpa_core.config import RpaConfig
 from gc_rpa_core.db import DbEndpoint
 from mobis_as import pu010
@@ -85,7 +86,7 @@ def test_main_returns_one_and_reports_failure(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(entry.pu010, "load", lambda: _settings("테스트 RPA"))
     monkeypatch.setattr(entry.pu010, "run", fail)
-    monkeypatch.setattr(entry.hub, "session", _reporter(sent))
+    monkeypatch.setattr(app.hub, "session", _reporter(sent))
 
     assert entry.main() == 1
     assert sent["name"] == "테스트 RPA"
@@ -99,7 +100,7 @@ def test_main_falls_back_when_config_has_no_name(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(entry.pu010, "load", lambda: _settings(""))
     monkeypatch.setattr(entry.pu010, "run", lambda *_a, **_k: Path("x.xlsx"))
-    monkeypatch.setattr(entry.hub, "session", _reporter(sent))
+    monkeypatch.setattr(app.hub, "session", _reporter(sent))
 
     assert entry.main() == 0
     assert sent["name"] == entry.FALLBACK_SYSTEM

@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import logging
 import sys
-import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from gc_rpa_core import config, hub
+from gc_rpa_core import app, config
 from gc_rpa_core.env import optional_env
-from gc_rpa_core.report import describe_error, print_banner, start_logging
+from gc_rpa_core.report import describe_error, start_logging
 from hkmc_api_app import build_settings, common, loader, registry
 from hkmc_api_app.build_settings import Build
 from hkmc_api_app.common import Api, Session, message, record_count, succeeded
@@ -67,7 +66,6 @@ def plan() -> Plan:
 
 def announce(chosen: Plan) -> None:
     planned = registry.ordered(chosen.build.indexes)
-    print_banner(chosen.name)
     logger.info(
         "[1/%d] 설정 조회   %s (build=%s, schedule_id=%s, API %s)",
         len(planned) + 2,
@@ -144,7 +142,7 @@ def finish(target: loader.Writer, report: Callable[[str, bool], None]) -> int:
     return 0
 
 
-def run(
+def sweep(
     build: Build,
     databases: Sequence[config.RpaDatabase],
     *,
@@ -183,47 +181,25 @@ def run(
     return totals
 
 
+def job(run: app.Run) -> app.Done:
+    chosen = plan()
+    run.begin(chosen.name)
+    announce(chosen)
+
+    def report_step(text: str, broken: bool) -> None:
+        if broken:
+            run.broke(text)
+        else:
+            run.step(text)
+
+    totals = sweep(chosen.build, chosen.databases, report=report_step)
+    summary, broken = summarize_totals(totals)
+    return app.Done(summary, broken=bool(broken), note=f"데이터 쓰기 대상: {chosen.written_to}")
+
+
 def main() -> int:
     start_logging()
-    began = time.monotonic()
-    name = FALLBACK_SYSTEM
-    written_to = ""
-
-    with (
-        hub.session() as hub_session,
-        hub.forwarding(hub_session, logger, level=logging.ERROR) as relay,
-    ):
-        try:
-            chosen = plan()
-            name = chosen.name
-            written_to = chosen.written_to
-            relay.system_name = name
-            announce(chosen)
-            hub_session.started(name=name)
-
-            def report_step(text: str, broken: bool) -> None:
-                if broken:
-                    hub_session.failed(message=text, name=name)
-                else:
-                    hub_session.progress(message=text, name=name)
-
-            totals = run(chosen.build, chosen.databases, report=report_step)
-        except Exception as exc:
-            logger.error("실패했습니다: %s", describe_error(exc))
-            logger.debug("상세 내역", exc_info=True)
-            hub_session.failed(message=describe_error(exc), name=name)
-            print_banner(f"실패했습니다  ({time.monotonic() - began:.1f}초)")
-            return 1
-
-        summary, broken = summarize_totals(totals)
-        if broken:
-            hub_session.failed(message=summary, name=name)
-        else:
-            hub_session.finished(message=summary, name=name)
-
-    print_banner(f"완료했습니다  {summary}  ({time.monotonic() - began:.1f}초)")
-    print(f"  데이터 쓰기 대상: {written_to}", flush=True)
-    return 1 if broken else 0
+    return app.start(FALLBACK_SYSTEM, logger, job)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ import pytest
 from autoway_mail import __main__ as entry
 from autoway_mail import common, inbox, mail
 from gc_rpa_autoway import site
-from gc_rpa_core import config
+from gc_rpa_core import app, config
 from gc_rpa_core.config import RpaConfig, RpaDatabase
 from gc_rpa_core.db import DbEndpoint
 
@@ -66,7 +66,7 @@ def test_main_reports_the_tally(
 ) -> None:
     sent: dict[str, Any] = {}
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
-    monkeypatch.setattr(entry.hub, "session", _hub(sent))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
     monkeypatch.setattr(mail, "run", lambda _: mail.Tally(done=3))
 
     assert entry.main() == 0
@@ -78,7 +78,7 @@ def test_main_returns_one_when_a_mail_failed(
 ) -> None:
     sent: dict[str, Any] = {}
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
-    monkeypatch.setattr(entry.hub, "session", _hub(sent))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
     monkeypatch.setattr(mail, "run", lambda _: mail.Tally(done=1, failed=2))
 
     assert entry.main() == 1
@@ -94,7 +94,7 @@ def test_main_returns_one_when_the_schedule_is_missing(
         raise LookupError("설정이 없습니다")
 
     monkeypatch.setattr(common, "load", boom)
-    monkeypatch.setattr(entry.hub, "session", _hub(sent))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
 
     assert entry.main() == 1
     assert "설정이 없습니다" in str(sent["failed"])
@@ -106,7 +106,7 @@ def test_main_falls_back_when_the_schedule_has_no_name(
     rpa_settings = replace(rpa_settings, name="")
     sent: dict[str, Any] = {}
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
-    monkeypatch.setattr(entry.hub, "session", _hub(sent))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
     monkeypatch.setattr(mail, "run", lambda _: mail.Tally())
 
     assert entry.main() == 0

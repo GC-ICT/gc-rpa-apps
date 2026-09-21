@@ -7,7 +7,7 @@ import pytest
 from autoway_document import __main__ as entry
 from autoway_document import common
 from gc_rpa_autoway import site
-from gc_rpa_core import config
+from gc_rpa_core import app, config
 from gc_rpa_core.config import RpaConfig, RpaDatabase
 from gc_rpa_core.db import DbEndpoint
 
@@ -64,7 +64,7 @@ def test_main_logs_in_and_reports(
 ) -> None:
     sent: dict[str, Any] = {}
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
-    monkeypatch.setattr(entry.hub, "session", _hub(sent))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
 
     assert entry.main() == 0
     assert "finished" in sent
@@ -78,7 +78,7 @@ def test_main_names_the_erp_target(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
-    monkeypatch.setattr(entry.hub, "session", _hub({}))
+    monkeypatch.setattr(app.hub, "session", _hub({}))
 
     with caplog.at_level("INFO", logger=entry.FALLBACK_SYSTEM):
         entry.main()
@@ -95,7 +95,7 @@ def test_main_reports_a_failure(
         raise LookupError("설정이 없습니다")
 
     monkeypatch.setattr(common, "load", boom)
-    monkeypatch.setattr(entry.hub, "session", _hub(sent))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
 
     assert entry.main() == 1
     assert "설정이 없습니다" in sent["failed"]["message"]

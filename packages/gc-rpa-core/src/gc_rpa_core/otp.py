@@ -119,6 +119,17 @@ class Mailbox:
         wait_ready(self.driver)
         return len(self.driver.find_elements(By.XPATH, self.profile.locator))
 
+    def mark(self) -> None:
+        self.seen = self.listed()
+
+    def read(self, *, timeout: float = ARRIVAL_TIMEOUT) -> str:
+        deadline = time.monotonic() + timeout
+        while self.listed() <= self.seen:
+            if time.monotonic() >= deadline:
+                raise OtpError(f"OTP 메일이 {timeout:.0f}초 안에 오지 않았습니다")
+            time.sleep(ARRIVAL_PAUSE)
+        return self.newest()
+
     def newest(self) -> str:
         found = self.driver.find_elements(By.XPATH, self.profile.locator)
         if not found:
@@ -134,17 +145,6 @@ class Mailbox:
         if not code:
             raise OtpError(f"'{self.profile.subject}' 본문에서 번호를 찾지 못했습니다")
         return code.group(1)
-
-    def mark(self) -> None:
-        self.seen = self.listed()
-
-    def read(self, *, timeout: float = ARRIVAL_TIMEOUT) -> str:
-        deadline = time.monotonic() + timeout
-        while self.listed() <= self.seen:
-            if time.monotonic() >= deadline:
-                raise OtpError(f"OTP 메일이 {timeout:.0f}초 안에 오지 않았습니다")
-            time.sleep(ARRIVAL_PAUSE)
-        return self.newest()
 
 
 @contextmanager

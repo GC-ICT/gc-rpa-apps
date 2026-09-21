@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from gc_rpa_core import app
 from gc_rpa_core.config import RpaConfig
 from gc_rpa_core.db import DbEndpoint
 from hd_seat_jit import __main__ as entry
@@ -71,7 +72,7 @@ def test_a_whole_run_reports_what_it_did(
     monkeypatch: pytest.MonkeyPatch, whole_run: dict[str, Any]
 ) -> None:
     sent: dict[str, Any] = {}
-    monkeypatch.setattr(entry.hub, "session", _hub(sent))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
 
     assert entry.main() == 0
     assert whole_run["plants"] == common.PLANTS
@@ -82,7 +83,7 @@ def test_a_whole_run_reports_what_it_did(
 def test_the_vpn_is_asked_for_with_its_own_schedule_ids(
     monkeypatch: pytest.MonkeyPatch, whole_run: dict[str, Any]
 ) -> None:
-    monkeypatch.setattr(entry.hub, "session", _hub({}))
+    monkeypatch.setattr(app.hub, "session", _hub({}))
 
     entry.main()
 
@@ -93,7 +94,7 @@ def test_the_vpn_is_asked_for_with_its_own_schedule_ids(
 def test_the_uploaded_workbooks_are_gone_afterwards(
     monkeypatch: pytest.MonkeyPatch, whole_run: dict[str, Any], tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(entry.hub, "session", _hub({}))
+    monkeypatch.setattr(app.hub, "session", _hub({}))
 
     entry.main()
 
@@ -109,7 +110,7 @@ def test_leftovers_from_the_last_run_are_thrown_away_first(
     stale = tmp_path / "work" / "download" / "stale.xlsx"
     stale.parent.mkdir(parents=True)
     stale.write_bytes(b"")
-    monkeypatch.setattr(entry.hub, "session", _hub({}))
+    monkeypatch.setattr(app.hub, "session", _hub({}))
 
     entry.main()
 
@@ -126,7 +127,7 @@ def test_a_failed_vpn_stops_before_the_browser(
 
     monkeypatch.setattr(vpn, "connect", boom)
     monkeypatch.setattr(orders, "run", lambda *_a, **_k: pytest.fail("VPN 없이 열면 안 됩니다"))
-    monkeypatch.setattr(entry.hub, "session", _hub(sent))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
 
     assert entry.main() == 1
     assert "f5vpn.exe" in sent["failed"]["message"]
@@ -145,7 +146,7 @@ def test_a_workbook_that_cannot_be_read_stops_the_load(
 
     monkeypatch.setattr(orders, "run", half_broken)
     monkeypatch.setattr(loader, "write", lambda *_a: pytest.fail("깨진 파일이 있으면 적재 금지"))
-    monkeypatch.setattr(entry.hub, "session", _hub(sent))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
 
     assert entry.main() == 1
     assert "broken.xlsx" in sent["failed"]["message"]
@@ -156,7 +157,7 @@ def test_the_rows_carry_every_field(
 ) -> None:
     kept: list[Any] = []
     monkeypatch.setattr(loader, "write", lambda _t, rows: kept.extend(rows) or len(rows))
-    monkeypatch.setattr(entry.hub, "session", _hub({}))
+    monkeypatch.setattr(app.hub, "session", _hub({}))
 
     entry.main()
 
