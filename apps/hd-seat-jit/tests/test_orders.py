@@ -31,6 +31,10 @@ class FakeDriver:
         self.frames: list[str] = []
         self.scripts: list[tuple[str, tuple[Any, ...]]] = []
         self.switch_to = FakeSwitch(self)
+        self.visited: list[str] = []
+
+    def get(self, url: str) -> None:
+        self.visited.append(url)
 
     def execute_script(self, script: str, *args: Any) -> Any:
         self.scripts.append((script, args))

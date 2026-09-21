@@ -13,6 +13,7 @@ from hd_seat_jit import sheet
 
 EXCEL_SUFFIX = ".xlsx"
 UNREADABLE_SUFFIX = ".xls"
+LEFTOVER_SUFFIXES = (EXCEL_SUFFIX, UNREADABLE_SUFFIX, ".crdownload")
 
 DELETE_ATTEMPTS = 3
 DELETE_PAUSE = 0.5
@@ -49,6 +50,15 @@ def downloaded(folder: Path) -> list[Path]:
     if not found:
         raise LoaderError(f"받은 엑셀이 없습니다: {folder}")
     return sorted(found, key=lambda path: path.stat().st_mtime)
+
+
+def clear(folder: Path) -> int:
+    leftovers = [
+        path
+        for path in folder.rglob("*")
+        if path.is_file() and path.suffix.lower() in LEFTOVER_SUFFIXES
+    ]
+    return discard(leftovers)
 
 
 def parsed(folder: Path, *, customer_code: str) -> list[sheet.Sheet]:

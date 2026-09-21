@@ -44,6 +44,8 @@ class OrderError(RuntimeError):
 
 
 def login(driver: WebDriver, settings: config.RpaConfig) -> None:
+    driver.get(settings.url)
+    wait_ready(driver)
     fill(driver, By.ID, USER_ID_INPUT, settings.user_id)
     fill(driver, By.ID, PASSWORD_INPUT, settings.password)
     click(driver, By.ID, LOGIN_BUTTON)
