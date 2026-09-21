@@ -9,7 +9,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 
 from gc_rpa_core import config, otp
-from gc_rpa_core.browser import chrome, click, click_if_shown, fill, wait_ready
+from gc_rpa_core.browser import chrome, click, click_if_shown, close_other_windows, fill, wait_ready
 
 PROCESS = "f5vpn.exe"
 
@@ -57,15 +57,6 @@ def allow_native_app() -> None:
     time.sleep(LAUNCH_WAIT)
 
 
-def dismiss_extra_windows(driver: WebDriver) -> None:
-    kept = driver.current_window_handle
-    for handle in driver.window_handles:
-        if handle != kept:
-            driver.switch_to.window(handle)
-            driver.close()
-    driver.switch_to.window(kept)
-
-
 def sign_in(driver: WebDriver, settings: config.RpaConfig) -> None:
     driver.get(settings.url)
     wait_ready(driver)
@@ -76,7 +67,7 @@ def sign_in(driver: WebDriver, settings: config.RpaConfig) -> None:
     fill(driver, By.ID, PASSWORD_INPUT, settings.password)
     click(driver, By.CLASS_NAME, SUBMIT_BUTTON)
     wait_ready(driver)
-    dismiss_extra_windows(driver)
+    close_other_windows(driver)
 
 
 def submit_code(driver: WebDriver, code: str) -> None:

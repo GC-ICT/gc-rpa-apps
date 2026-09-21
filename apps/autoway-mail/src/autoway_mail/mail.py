@@ -12,7 +12,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from autoway_mail import capture, history, inbox
 from gc_rpa_autoway import erp, poppler
 from gc_rpa_core import config
-from gc_rpa_core.browser import RendererHangError, session_dead
+from gc_rpa_core.browser import RendererHangError, close_other_windows, session_dead
 
 TASK_CODE = "MAIL"
 
@@ -183,7 +183,7 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
         folder = None
 
         step = Step.MOVE
-        inbox.windows_closed_to(session.driver, session.driver.current_window_handle)
+        close_other_windows(session.driver)
         inbox.enter_mail_frame(session.driver)
         inbox.retry_move(session.driver)
         if listing.key:
@@ -195,7 +195,7 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
 
 def move_registered(session: Session, listing: inbox.Listing) -> None:
     inbox.open_listing(session.driver, listing)
-    inbox.windows_closed_to(session.driver, session.driver.current_window_handle)
+    close_other_windows(session.driver)
     inbox.enter_mail_frame(session.driver)
     inbox.retry_move(session.driver)
     if listing.key:
@@ -248,23 +248,10 @@ def run(session: Session) -> Tally:
                 outcome, document_no = Outcome.MOVED, found.document_no
             else:
                 outcome, document_no = process(session, listing)
-        except StepError as failure:
-            tally.failed += 1
-            position += 1
-            if not stop_after(session, listing, failure, tally):
-                continue
-            break
         except Exception as exc:
             tally.failed += 1
             position += 1
-            logger.error("      실패: %s / %s", listing.label, exc)
-            if session_dead(exc):
-                tally.stopped = "드라이버 세션 끊김"
-                break
-            note_failure(session, listing, Step.MOVE, exc)
-            recover(session, None)
-            if tally.failed >= MAX_FAILURES:
-                tally.stopped = f"실패 {MAX_FAILURES}회"
+            if stop_after(session, listing, as_step_error(exc), tally):
                 break
             continue
 
@@ -274,6 +261,12 @@ def run(session: Session) -> Tally:
         session.report(f"{detail} | {listing.label} ({tally.done}/{MAX_MAILS})")
 
     return tally
+
+
+def as_step_error(exc: Exception) -> StepError:
+    if isinstance(exc, StepError):
+        return exc
+    return StepError(Step.MOVE, exc, None)
 
 
 def stop_after(session: Session, listing: inbox.Listing, failure: StepError, tally: Tally) -> bool:

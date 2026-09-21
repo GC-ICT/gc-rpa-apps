@@ -74,8 +74,10 @@ class FakeInbox:
 
 @pytest.fixture(autouse=True)
 def no_browser(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("enter_mail_frame", "settle", "windows_closed_to"):
+    for name in ("enter_mail_frame", "settle"):
         monkeypatch.setattr(inbox, name, lambda *_a, **_k: None)
+    monkeypatch.setattr(mail, "close_other_windows", lambda *_a, **_k: 0)
+    monkeypatch.setattr(capture, "close_other_windows", lambda *_a, **_k: 0)
     monkeypatch.setattr(inbox, "fill_missing", lambda *_a: False)
     monkeypatch.setattr(capture, "save_attachments", lambda *_a, **_k: 0)
     monkeypatch.setattr(capture, "save_eml", lambda *_a, **_k: 0)

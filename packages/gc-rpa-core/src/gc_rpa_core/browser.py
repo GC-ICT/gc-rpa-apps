@@ -27,6 +27,7 @@ PAGE_TIMEOUT = 300
 ELEMENT_TIMEOUT = 60
 ALERT_TIMEOUT = 5
 DOWNLOAD_TIMEOUT = 300
+DOWNLOAD_POLL = 0.5
 PARTIAL_SUFFIXES = (".crdownload", ".tmp", ".part")
 STAMP_FORMAT = "%H%M%S"
 SLOW_START_SECONDS = 3.0
@@ -236,6 +237,19 @@ def click_if_shown(driver: WebDriver, by: str, locator: str) -> int:
     return pressed
 
 
+def close_other_windows(driver: WebDriver, keep: str = "") -> int:
+    kept = keep or driver.current_window_handle
+    closed = 0
+    for handle in list(driver.window_handles):
+        if handle == kept:
+            continue
+        driver.switch_to.window(handle)
+        driver.close()
+        closed += 1
+    driver.switch_to.window(kept)
+    return closed
+
+
 def accept_alert(driver: WebDriver, *, timeout: float = ALERT_TIMEOUT) -> bool:
     try:
         WebDriverWait(driver, timeout).until(ec.alert_is_present())
@@ -259,7 +273,7 @@ def wait_download(directory: Path, *, before: set[Path], timeout: float = DOWNLO
         added = settled_files(directory) - before
         if added:
             return max(added, key=lambda path: path.stat().st_mtime)
-        time.sleep(0.5)
+        time.sleep(DOWNLOAD_POLL)
 
     raise DownloadError(f"{timeout}초 안에 새 파일이 내려오지 않았습니다: {directory}")
 

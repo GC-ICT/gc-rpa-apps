@@ -15,6 +15,8 @@ from gc_rpa_core.browser import (
     PARTIAL_SUFFIXES,
     RendererHangError,
     call_cdp,
+    close_other_windows,
+    session_dead,
     settled_files,
     wait_ready,
 )
@@ -37,6 +39,7 @@ EXPAND_SETTLE = 0.6
 
 ATTACHMENT_TIMEOUT = 3.0
 EXPORT_TIMEOUT = 10.0
+EXPORT_RETRY_PAUSE = 1.0
 
 DOWNLOAD_START_GRACE = 5.0
 DOWNLOAD_TIMEOUT = 180.0
@@ -168,9 +171,13 @@ def press_export_toolbar(driver: WebDriver, *, attempts: int = 3) -> None:
             inbox.press(driver, button)
             return
         except Exception as exc:
+            if session_dead(exc):
+                raise
             last = exc
-            logger.warning("      EML 저장 버튼 클릭 실패 → 재시도 %d/%d", attempt, attempts)
-            time.sleep(1.0)
+            logger.warning(
+                "      EML 저장 버튼 클릭 실패 → 재시도 %d/%d: %s", attempt, attempts, exc
+            )
+            time.sleep(EXPORT_RETRY_PAUSE)
             inbox.enter_mail_frame(driver)
     raise CaptureError(f"EML 저장 버튼을 {attempts}회 눌렀으나 실패했습니다: {last}")
 
@@ -322,11 +329,11 @@ def save_body_pdf(driver: WebDriver, folder: Path) -> Path:
     except RendererHangError:
         raise
     except Exception:
-        inbox.windows_closed_to(driver, main)
+        close_other_windows(driver, main)
         inbox.enter_mail_frame(driver)
         raise
 
-    inbox.windows_closed_to(driver, main)
+    close_other_windows(driver, main)
     inbox.enter_mail_frame(driver)
     return path
 

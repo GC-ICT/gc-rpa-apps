@@ -111,10 +111,6 @@ class TokenError(RuntimeError):
     pass
 
 
-class InterfaceError(RuntimeError):
-    pass
-
-
 def require_env(name: str) -> str:
     value = os.getenv(name)
     if not value:

@@ -416,12 +416,3 @@ def settle(driver: WebDriver) -> None:
             step()
         except Exception:
             continue
-
-
-def windows_closed_to(driver: WebDriver, keep: str) -> None:
-    for handle in list(driver.window_handles):
-        if handle == keep:
-            continue
-        driver.switch_to.window(handle)
-        driver.close()
-    driver.switch_to.window(keep)

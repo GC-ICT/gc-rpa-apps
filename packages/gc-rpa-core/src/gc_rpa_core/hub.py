@@ -29,10 +29,6 @@ FINISHED = "완료"
 logger = logging.getLogger(__name__)
 
 
-class HubError(RuntimeError):
-    pass
-
-
 def hub_url() -> str:
     return require_env(HUB_URL_ENV)
 
