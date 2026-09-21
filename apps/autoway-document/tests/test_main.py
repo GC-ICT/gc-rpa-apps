@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from autoway_document import __main__ as entry
-from autoway_document import common
+from autoway_document import common, document
 from gc_rpa_autoway import site
 from gc_rpa_core import app, config
 from gc_rpa_core.config import RpaConfig, RpaDatabase
@@ -57,6 +57,7 @@ def quiet_browser(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(entry, "chrome", fake_chrome)
     monkeypatch.setattr(site, "login", lambda *_a: None)
     monkeypatch.setattr(config, "usable_database", lambda _settings: erp_database())
+    monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: None)
 
 
 def test_main_logs_in_and_reports(
@@ -99,3 +100,34 @@ def test_main_reports_a_failure(
 
     assert entry.main() == 1
     assert "설정이 없습니다" in sent["failed"]["message"]
+
+
+def test_a_captured_document_is_reported_without_approving(
+    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig, tmp_path: Any
+) -> None:
+    sent: dict[str, Any] = {}
+    taken = document.Captured(
+        document=document.Document("2026-000123", "현대글로비스", "9월 정산"),
+        folder=tmp_path / "2026-000123",
+        attachments=2,
+        pdf=tmp_path / "2026-000123" / "2026-000123.pdf",
+        images=[],
+    )
+    monkeypatch.setattr(common, "load", lambda: rpa_settings)
+    monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: taken)
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
+
+    assert entry.main() == 0
+    assert "2026-000123" in sent["finished"]["message"]
+    assert "첨부 2건" in sent["finished"]["message"]
+
+
+def test_an_empty_approval_box_is_reported(
+    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig
+) -> None:
+    sent: dict[str, Any] = {}
+    monkeypatch.setattr(common, "load", lambda: rpa_settings)
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
+
+    assert entry.main() == 0
+    assert sent["finished"]["message"] == "결재할 문서가 없습니다"

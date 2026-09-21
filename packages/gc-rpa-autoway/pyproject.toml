@@ -5,6 +5,7 @@ description = "오토웨이 사이트 공용 코드"
 requires-python = ">=3.12"
 dependencies = [
     "gc-rpa-core",
+    "pdf2image>=1.17",
     "selenium>=4.27",
 ]
 

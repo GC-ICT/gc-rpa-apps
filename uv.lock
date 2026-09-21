@@ -250,6 +250,7 @@ source = { editable = "apps/autoway-document" }
 dependencies = [
     { name = "gc-rpa-autoway" },
     { name = "gc-rpa-core" },
+    { name = "pdf2image" },
     { name = "selenium" },
 ]
 
@@ -257,6 +258,7 @@ dependencies = [
 requires-dist = [
     { name = "gc-rpa-autoway", editable = "packages/gc-rpa-autoway" },
     { name = "gc-rpa-core", editable = "packages/gc-rpa-core" },
+    { name = "pdf2image", specifier = ">=1.17" },
     { name = "selenium", specifier = ">=4.27" },
 ]
 
@@ -535,12 +537,14 @@ version = "0.1.0"
 source = { editable = "packages/gc-rpa-autoway" }
 dependencies = [
     { name = "gc-rpa-core" },
+    { name = "pdf2image" },
     { name = "selenium" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "gc-rpa-core", editable = "packages/gc-rpa-core" },
+    { name = "pdf2image", specifier = ">=1.17" },
     { name = "selenium", specifier = ">=4.27" },
 ]
 

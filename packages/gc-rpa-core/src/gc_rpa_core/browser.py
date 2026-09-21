@@ -33,6 +33,8 @@ STAMP_FORMAT = "%H%M%S"
 SLOW_START_SECONDS = 3.0
 
 CDP_TIMEOUT = 20.0
+FRAME_POLL = 0.3
+FRAMES = "iframe, frame"
 
 BROWSER_PROCESSES = ("chrome.exe", "chromedriver.exe")
 TERMINATION_SIGNALS = ("SIGINT", "SIGTERM", "SIGBREAK")
@@ -235,6 +237,37 @@ def click_if_shown(driver: WebDriver, by: str, locator: str) -> int:
             driver.execute_script("arguments[0].click();", element)
         pressed += 1
     return pressed
+
+
+def here_or_none(driver: WebDriver, by: str, locator: str) -> WebElement | None:
+    found = driver.find_elements(by, locator)
+    return found[0] if found else None
+
+
+def find_in_frames(
+    driver: WebDriver, by: str, locator: str, *, timeout: float = ELEMENT_TIMEOUT
+) -> WebElement | None:
+    deadline = time.monotonic() + timeout
+    while True:
+        driver.switch_to.default_content()
+        found = here_or_none(driver, by, locator)
+        if found is not None:
+            return found
+
+        for frame in driver.find_elements("css selector", FRAMES):
+            driver.switch_to.default_content()
+            try:
+                driver.switch_to.frame(frame)
+            except Exception:
+                continue
+            found = here_or_none(driver, by, locator)
+            if found is not None:
+                return found
+
+        driver.switch_to.default_content()
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(FRAME_POLL)
 
 
 def close_other_windows(driver: WebDriver, keep: str = "") -> int:

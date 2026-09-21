@@ -6,7 +6,7 @@ import pytest
 from autoway_mail import capture, history, inbox, mail
 from autoway_mail.inbox import Listing
 from autoway_mail.mail import Outcome, Session, Step, StepError, Tally
-from gc_rpa_autoway import erp
+from gc_rpa_autoway import erp, poppler
 from gc_rpa_core.browser import RendererHangError
 from gc_rpa_core.db import DbEndpoint
 
@@ -81,7 +81,7 @@ def no_browser(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(inbox, "fill_missing", lambda *_a: False)
     monkeypatch.setattr(capture, "save_attachments", lambda *_a, **_k: 0)
     monkeypatch.setattr(capture, "save_eml", lambda *_a, **_k: 0)
-    monkeypatch.setattr(capture, "save_page_images", lambda *_a, **_k: [])
+    monkeypatch.setattr(poppler, "to_images", lambda *_a, **_k: [])
     monkeypatch.setattr(capture, "DOWNLOAD_START_GRACE", 0.01)
     monkeypatch.setattr(capture, "DOWNLOAD_TIMEOUT", 0.05)
 

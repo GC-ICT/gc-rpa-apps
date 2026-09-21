@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 
-from autoway_document import common
+from autoway_document import common, document
 from gc_rpa_autoway import erp, poppler, site
 from gc_rpa_core import app, config
 from gc_rpa_core import workspace as folders
@@ -45,9 +45,14 @@ def job(run: app.Run) -> app.Done:
         keep_dialogs=True,
     ) as driver:
         site.login(driver, settings)
-        logger.info("[3/3] 문서 처리   아직 만들지 않았습니다")
+        logger.info("[3/3] 문서 한 건")
+        taken = document.capture_one(driver, workspace=workspace, downloads=downloads)
 
-    return app.Done("로그인까지 확인했습니다 (문서 처리 단계 없음)")
+    if taken is None:
+        return app.Done("결재할 문서가 없습니다")
+
+    summary = f"{taken.document.number} 내려받음 (첨부 {taken.attachments}건)"
+    return app.Done(summary, note=f"받은 곳: {taken.folder}  ※ 결재·ERP 등록은 하지 않았습니다")
 
 
 def main() -> int:

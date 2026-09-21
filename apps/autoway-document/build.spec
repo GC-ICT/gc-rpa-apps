@@ -13,7 +13,7 @@ if env_file.is_file():
 else:
     print("[build.spec] .env 가 없어 실행파일에 포함하지 않습니다.")
 
-for package in ("pymssql", "pysignalr", "dotenv", "selenium"):
+for package in ("pymssql", "pysignalr", "dotenv", "selenium", "pdf2image"):
     package_datas, package_binaries, package_hidden = collect_all(package)
     datas += package_datas
     binaries += package_binaries
@@ -51,6 +51,7 @@ a = Analysis(
     + [
         "autoway_document",
         "autoway_document.common",
+        "autoway_document.document",
         "gc_rpa_autoway",
         "gc_rpa_autoway.erp",
         "gc_rpa_autoway.poppler",

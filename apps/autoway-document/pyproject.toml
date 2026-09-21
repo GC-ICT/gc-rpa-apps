@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "gc-rpa-core",
     "gc-rpa-autoway",
+    "pdf2image>=1.17",
     "selenium>=4.27",
 ]
 

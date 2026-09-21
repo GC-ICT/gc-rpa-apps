@@ -6,7 +6,6 @@ import shutil
 import time
 from pathlib import Path
 
-from pdf2image import convert_from_path
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 
@@ -336,22 +335,3 @@ def save_body_pdf(driver: WebDriver, folder: Path) -> Path:
     close_other_windows(driver, main)
     inbox.enter_mail_frame(driver)
     return path
-
-
-def save_page_images(pdf: Path, poppler: str) -> list[Path]:
-    written: list[Path] = []
-    try:
-        pages = (
-            convert_from_path(str(pdf), poppler_path=poppler)
-            if poppler
-            else convert_from_path(str(pdf))
-        )
-    except Exception as exc:
-        logger.warning("      본문 이미지 변환을 건너뜁니다: %s", exc)
-        return written
-
-    for number, page in enumerate(pages, start=1):
-        image = pdf.with_name(f"{pdf.stem}_{number}.jpg")
-        page.save(image, "JPEG")
-        written.append(image)
-    return written
