@@ -23,7 +23,7 @@ def warn_about_poppler() -> None:
 
 
 def erp_target(settings: config.RpaConfig) -> erp.Target:
-    target = erp.target(erp.usable_database(settings), key_column=common.ERP_KEY_COLUMN)
+    target = erp.target(config.usable_database(settings), key_column=common.ERP_KEY_COLUMN)
     logger.info("      ERP 등록 %s / %s", target.endpoint.database, target.file_table)
     return target
 

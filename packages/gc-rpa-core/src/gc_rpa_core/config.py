@@ -105,6 +105,17 @@ def load(schedule_id: str) -> RpaConfig:
     )
 
 
+def usable_database(settings: RpaConfig) -> RpaDatabase:
+    databases = load_databases(settings.actprg_id)
+    filled = next((database for database in databases if not database.complaint), None)
+    if filled is None:
+        raise LookupError(
+            f"{PROCEDURE} 의 actprg_id={settings.actprg_id} 에 "
+            f"쓸 수 있는 DB 가 없습니다: {databases[0].complaint}"
+        )
+    return filled
+
+
 def load_databases(actprg_id: str) -> tuple[RpaDatabase, ...]:
     with cursor() as opened:
         opened.execute(DATABASE_CALL, (DATABASE_SELECT_TYPE, actprg_id))

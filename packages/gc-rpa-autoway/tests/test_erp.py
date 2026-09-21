@@ -326,19 +326,8 @@ def test_the_file_insert_names_the_key_column_of_the_target() -> None:
     assert "(ID, docu_no, file_sq" in erp.file_insert(FILE_TABLE, "docu_no")
 
 
-def test_usable_database_picks_the_first_filled_in_row(
-    monkeypatch: pytest.MonkeyPatch, rpa_settings: Any
-) -> None:
-    rows = (rpa_database(name="빈 DB", queries=()), rpa_database(name="쓸 수 있는 DB"))
-    monkeypatch.setattr(erp.config, "load_databases", lambda _: rows)
+def test_the_file_insert_carries_every_audit_column() -> None:
+    statement = erp.file_insert(FILE_TABLE, "mail_no")
 
-    assert erp.usable_database(rpa_settings).name == "쓸 수 있는 DB"
-
-
-def test_usable_database_complains_when_every_row_is_short(
-    monkeypatch: pytest.MonkeyPatch, rpa_settings: Any
-) -> None:
-    monkeypatch.setattr(erp.config, "load_databases", lambda _: (rpa_database(queries=()),))
-
-    with pytest.raises(LookupError, match="act_query"):
-        erp.usable_database(rpa_settings)
+    assert "NEWID()" in statement
+    assert statement.count("GETDATE()") == 2

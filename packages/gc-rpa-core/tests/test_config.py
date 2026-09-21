@@ -241,3 +241,36 @@ def test_a_database_complains_about_its_missing_tables() -> None:
 
 def test_a_database_complains_about_its_missing_queries() -> None:
     assert "act_query" in rpa_database(queries=()).complaint
+
+
+def rpa_settings(actprg_id: str = "3") -> config.RpaConfig:
+    empty = DbEndpoint("", None, "", "", "")
+    return config.RpaConfig(
+        name="테스트",
+        url="",
+        user_id="",
+        password="",
+        otp="",
+        use_otp=False,
+        move_path="",
+        exe_name="",
+        source=empty,
+        target=empty,
+        actprg_id=actprg_id,
+    )
+
+
+def test_usable_database_picks_the_first_filled_in_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = (rpa_database(name="빈 DB", queries=()), rpa_database(name="쓸 수 있는 DB"))
+    monkeypatch.setattr(config, "load_databases", lambda _: rows)
+
+    assert config.usable_database(rpa_settings()).name == "쓸 수 있는 DB"
+
+
+def test_usable_database_complains_when_every_row_is_short(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(config, "load_databases", lambda _: (rpa_database(queries=()),))
+
+    with pytest.raises(LookupError, match="act_query"):
+        config.usable_database(rpa_settings())

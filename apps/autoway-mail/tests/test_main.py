@@ -7,7 +7,8 @@ import pytest
 
 from autoway_mail import __main__ as entry
 from autoway_mail import common, inbox, mail
-from gc_rpa_autoway import erp, site
+from gc_rpa_autoway import site
+from gc_rpa_core import config
 from gc_rpa_core.config import RpaConfig, RpaDatabase
 from gc_rpa_core.db import DbEndpoint
 
@@ -57,7 +58,7 @@ def quiet_browser(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(entry, "chrome", fake_chrome)
     monkeypatch.setattr(site, "login", lambda *_a: None)
     monkeypatch.setattr(inbox, "open_module", lambda *_a: None)
-    monkeypatch.setattr(erp, "usable_database", lambda _settings: erp_database())
+    monkeypatch.setattr(config, "usable_database", lambda _settings: erp_database())
 
 
 def test_main_reports_the_tally(

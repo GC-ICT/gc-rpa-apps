@@ -9,7 +9,6 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from gc_rpa_core import config
 from gc_rpa_core.config import RpaDatabase
 from gc_rpa_core.db import DbEndpoint, cursor
 from gc_rpa_core.statement import bind
@@ -39,17 +38,6 @@ class Target:
     header: str
     file_table: str
     key_column: str
-
-
-def usable_database(settings: config.RpaConfig) -> RpaDatabase:
-    databases = config.load_databases(settings.actprg_id)
-    filled = next((database for database in databases if not database.complaint), None)
-    if filled is None:
-        raise LookupError(
-            f"{config.PROCEDURE} 의 actprg_id={settings.actprg_id} 에 "
-            f"쓸 수 있는 DB 가 없습니다: {databases[0].complaint}"
-        )
-    return filled
 
 
 def target(database: RpaDatabase, *, key_column: str) -> Target:
