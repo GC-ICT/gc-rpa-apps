@@ -268,20 +268,20 @@ def release_viewport(driver: WebDriver) -> None:
         logger.debug("      창 크기를 되돌리지 못했습니다")
 
 
-def print_media(driver: WebDriver) -> None:
+def screen_media(driver: WebDriver) -> None:
     try:
         call_cdp(
-            driver, "Emulation.setEmulatedMedia", {"media": "print"}, timeout=PDF_SETUP_TIMEOUT
+            driver, "Emulation.setEmulatedMedia", {"media": "screen"}, timeout=PDF_SETUP_TIMEOUT
         )
     except RendererHangError:
         raise
     except Exception:
-        logger.debug("      인쇄 CSS 적용을 건너뜁니다")
+        logger.debug("      화면 CSS 적용을 건너뜁니다")
 
 
 def lay_out_whole_body(driver: WebDriver) -> tuple[int, int]:
     stretch_viewport(driver, VIEWPORT_HEIGHT)
-    print_media(driver)
+    screen_media(driver)
 
     width, height = content_size(driver)
     if height > VIEWPORT_HEIGHT:
