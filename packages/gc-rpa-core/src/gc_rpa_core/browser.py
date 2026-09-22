@@ -35,8 +35,36 @@ SLOW_START_SECONDS = 3.0
 CDP_TIMEOUT = 40.0
 FRAME_POLL = 0.3
 FRAMES = "iframe, frame"
+TOOLBAR_WORDS = ("결재", "반송", "공람자", "결재선", "접수확인", "유용한 기능")
+TOOLBAR_TEXT_LIMIT = 80
 BODY_FALLBACK = 6000
 BODY_SETTLE = 1.5
+
+HIDE_TOOLBARS = """
+var marks = MARKS;
+var limit = LIMIT;
+var hidden = 0;
+var buttons = document.querySelectorAll('button, a');
+for (var i = 0; i < buttons.length; i++) {
+  var text = (buttons[i].innerText || '').trim();
+  var matched = false;
+  for (var m = 0; m < marks.length; m++) {
+    if (text === marks[m]) { matched = true; break; }
+  }
+  if (!matched) { continue; }
+
+  var box = buttons[i];
+  while (box.parentElement && box.parentElement !== document.body
+         && (box.parentElement.innerText || '').trim().length < limit) {
+    box = box.parentElement;
+  }
+  if (box !== document.body && box.style.display !== 'none') {
+    box.style.display = 'none';
+    hidden++;
+  }
+}
+return hidden;
+"""
 
 OPEN_BODY_FRAME = """
 var frames = document.querySelectorAll('iframe, frame');
@@ -337,6 +365,17 @@ def accept_alert(driver: WebDriver, *, timeout: float = ALERT_TIMEOUT) -> bool:
         return False
     driver.switch_to.alert.accept()
     return True
+
+
+def hide_toolbars(driver: WebDriver) -> int:
+    script = HIDE_TOOLBARS.replace("MARKS", str(list(TOOLBAR_WORDS))).replace(
+        "LIMIT", str(TOOLBAR_TEXT_LIMIT)
+    )
+    try:
+        return int(driver.execute_script(script) or 0)
+    except Exception:
+        logger.debug("버튼 줄을 숨기지 못했습니다")
+        return 0
 
 
 def open_body_frame(driver: WebDriver) -> int:

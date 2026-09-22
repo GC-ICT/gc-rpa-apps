@@ -201,3 +201,28 @@ def test_click_if_shown_falls_back_to_a_script_click() -> None:
 
 def test_click_if_shown_is_quiet_when_nothing_is_there() -> None:
     assert browser.click_if_shown(Page([]), "css", "button") == 0
+
+
+def test_a_page_that_refuses_scripts_hides_nothing() -> None:
+    from gc_rpa_core import browser
+
+    class Stubborn:
+        def execute_script(self, _script: str) -> int:
+            raise RuntimeError("스크립트를 막았습니다")
+
+    assert browser.hide_toolbars(Stubborn()) == 0  # type: ignore[arg-type]
+
+
+def test_the_toolbar_words_reach_the_script() -> None:
+    from gc_rpa_core import browser
+
+    seen: list[str] = []
+
+    class Page:
+        def execute_script(self, script: str) -> int:
+            seen.append(script)
+            return 2
+
+    assert browser.hide_toolbars(Page()) == 2  # type: ignore[arg-type]
+    assert "결재" in seen[0]
+    assert "MARKS" not in seen[0]
