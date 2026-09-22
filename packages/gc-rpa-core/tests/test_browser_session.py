@@ -124,16 +124,44 @@ def test_kill_browsers_does_nothing_off_windows(monkeypatch: pytest.MonkeyPatch)
     browser.kill_browsers()
 
 
-def test_kill_browsers_targets_chrome_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_only_our_own_driver_is_killed(monkeypatch: pytest.MonkeyPatch) -> None:
     from gc_rpa_core import browser
 
     called: list[list[str]] = []
     monkeypatch.setattr(browser.os, "name", "nt")
     monkeypatch.setattr(browser.subprocess, "run", lambda args, **_k: called.append(args))
+    monkeypatch.setattr(browser, "OWN_DRIVERS", {4242})
 
     browser.kill_browsers()
 
-    assert [args[3] for args in called] == list(browser.BROWSER_PROCESSES)
+    assert called == [["taskkill", "/F", "/T", "/PID", "4242"]]
+
+
+def test_a_stranger_chrome_is_left_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    from gc_rpa_core import browser
+
+    monkeypatch.setattr(browser.os, "name", "nt")
+    monkeypatch.setattr(browser, "OWN_DRIVERS", set())
+    monkeypatch.setattr(
+        browser.subprocess, "run", lambda *_a, **_k: pytest.fail("남의 크롬은 건드리지 않습니다")
+    )
+
+    browser.kill_browsers()
+
+
+def test_a_started_driver_is_remembered(monkeypatch: pytest.MonkeyPatch) -> None:
+    from gc_rpa_core import browser
+
+    class FakeService:
+        process = type("Process", (), {"pid": 777})()
+
+    class FakeDriver:
+        service = FakeService()
+
+    monkeypatch.setattr(browser, "OWN_DRIVERS", set())
+
+    assert browser.remember_driver(FakeDriver()) == 777  # type: ignore[arg-type]
+    assert 777 in browser.OWN_DRIVERS
 
 
 def test_exit_cleanup_registers_handlers(monkeypatch: pytest.MonkeyPatch) -> None:

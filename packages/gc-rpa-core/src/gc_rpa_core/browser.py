@@ -87,7 +87,7 @@ return opened;
 """
 
 
-BROWSER_PROCESSES = ("chrome.exe", "chromedriver.exe")
+OWN_DRIVERS: set[int] = set()
 TERMINATION_SIGNALS = ("SIGINT", "SIGTERM", "SIGBREAK")
 
 DEAD_SESSION_MARKERS = (
@@ -180,12 +180,21 @@ def call_cdp(
     return result
 
 
+def remember_driver(driver: WebDriver) -> int:
+    process = getattr(getattr(driver, "service", None), "process", None)
+    pid = int(getattr(process, "pid", 0) or 0)
+    if pid:
+        OWN_DRIVERS.add(pid)
+    return pid
+
+
 def kill_browsers() -> None:
     if os.name != "nt":
         logger.debug("윈도우가 아니라 잔여 브라우저 정리를 건너뜁니다")
         return
-    for name in BROWSER_PROCESSES:
-        subprocess.run(["taskkill", "/F", "/IM", name, "/T"], capture_output=True, check=False)
+    for pid in sorted(OWN_DRIVERS):
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, check=False)
+    OWN_DRIVERS.clear()
 
 
 def clean_up_browsers_on_exit() -> None:
@@ -245,6 +254,7 @@ def chrome(
     if elapsed >= SLOW_START_SECONDS:
         logger.info("      드라이버 준비를 마쳤습니다 (%.1f초)", elapsed)
 
+    pid = remember_driver(driver)
     driver.set_page_load_timeout(PAGE_TIMEOUT)
     driver.set_script_timeout(PAGE_TIMEOUT)
     try:
@@ -252,6 +262,7 @@ def chrome(
         yield driver
     finally:
         driver.quit()
+        OWN_DRIVERS.discard(pid)
 
 
 def wait_ready(driver: WebDriver, *, timeout: float = PAGE_TIMEOUT) -> None:
