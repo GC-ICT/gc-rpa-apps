@@ -58,6 +58,28 @@ PDF_PARAMS = {
     "scale": 0.95,
 }
 
+BODY_FRAME_SCRIPT = """
+var frames = document.querySelectorAll('iframe, frame');
+var best = '';
+var top = 0;
+for (var i = 0; i < frames.length; i++) {
+  var frame = frames[i];
+  var length = 0;
+  try {
+    var inner = frame.contentDocument;
+    length = inner && inner.body ? inner.body.innerText.trim().length : 0;
+  } catch (e) {
+    length = 0;
+  }
+  var score = length || frame.clientWidth * frame.clientHeight;
+  if (score > top && frame.src && frame.src.indexOf('http') === 0) {
+    top = score;
+    best = frame.src;
+  }
+}
+return best;
+"""
+
 MEASURE_PAGE = """
 var doc = document.documentElement;
 var body = document.body;
@@ -256,6 +278,13 @@ def print_media(driver: WebDriver) -> None:
         logger.debug("      인쇄 CSS 적용을 건너뜁니다")
 
 
+def body_frame_url(driver: WebDriver) -> str:
+    try:
+        return str(driver.execute_script(BODY_FRAME_SCRIPT) or "")
+    except Exception:
+        return ""
+
+
 def write_pdf(driver: WebDriver, folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / PDF_NAME
@@ -272,6 +301,25 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     if path.stat().st_size <= 0:
         raise CaptureError(f"저장된 PDF 크기가 0입니다: {path}")
     return path
+
+
+def write_body_pdf(driver: WebDriver, folder: Path) -> Path:
+    url = body_frame_url(driver)
+    if not url:
+        logger.info("      본문 주소를 찾지 못해 팝업 화면을 그대로 담습니다")
+        return write_pdf(driver, folder)
+
+    popup = driver.current_window_handle
+    driver.switch_to.new_window("tab")
+    try:
+        driver.get(url)
+        wait_ready(driver)
+        wait_for_body(driver)
+        time.sleep(POPUP_SETTLE)
+        return write_pdf(driver, folder)
+    finally:
+        driver.close()
+        driver.switch_to.window(popup)
 
 
 def save_body_pdf(driver: WebDriver, folder: Path) -> Path:
@@ -292,7 +340,7 @@ def save_body_pdf(driver: WebDriver, folder: Path) -> Path:
     try:
         focus_popup(driver, before)
         inbox.dismiss_layer(driver, settle=1.0)
-        path = write_pdf(driver, folder)
+        path = write_body_pdf(driver, folder)
     except RendererHangError:
         raise
     except Exception:

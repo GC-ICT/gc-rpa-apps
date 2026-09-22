@@ -11,6 +11,7 @@ DEFAULT_SCHEDULE_ID = "5"
 
 HISTORY_FILE = "history.db"
 HEADLESS_ENV = "AUTOWAY_MAIL_HEADLESS"
+KEEP_ENV = "AUTOWAY_MAIL_KEEP"
 
 ERP_KEY_COLUMN = "mail_no"
 
@@ -29,3 +30,7 @@ def history_path(settings: config.RpaConfig) -> Path:
 
 def headless() -> bool:
     return config.flag(optional_env(HEADLESS_ENV, "1"))
+
+
+def keeping() -> bool:
+    return config.flag(optional_env(KEEP_ENV, "Y"))

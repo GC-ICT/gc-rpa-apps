@@ -9,7 +9,7 @@ from pathlib import Path
 
 from selenium.webdriver.remote.webdriver import WebDriver
 
-from autoway_mail import capture, history, inbox
+from autoway_mail import capture, common, history, inbox
 from gc_rpa_autoway import erp, poppler
 from gc_rpa_core import config
 from gc_rpa_core.browser import RendererHangError, close_other_windows, session_dead
@@ -180,7 +180,10 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
         )
         if listing.key:
             session.store.mark_registered(listing.key, document_no)
-        discard(folder)
+        if common.keeping():
+            logger.info("      올린 폴더를 남겨둡니다: %s", folder)
+        else:
+            discard(folder)
         folder = None
 
         step = Step.MOVE

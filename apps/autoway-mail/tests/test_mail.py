@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from autoway_mail import capture, history, inbox, mail
+from autoway_mail import capture, common, history, inbox, mail
 from autoway_mail.inbox import Listing
 from autoway_mail.mail import Outcome, Session, Step, StepError, Tally
 from gc_rpa_autoway import erp, poppler
@@ -313,10 +313,26 @@ def test_outcomes_read_in_korean() -> None:
     assert Outcome.MOVED.value == "이동"
 
 
-def test_an_uploaded_folder_is_removed(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_uploaded_folder_is_kept_for_checking(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     feed(monkeypatch, [listing()])
     monkeypatch.setattr(capture, "save_body_pdf", writes_pdf(session))
     monkeypatch.setattr(erp, "register", lambda *_a, **_k: "HR-9")
+    monkeypatch.setenv(common.KEEP_ENV, "Y")
+
+    mail.run(session)
+
+    assert list(session.holding_dir.iterdir())
+
+
+def test_an_uploaded_folder_is_removed_when_asked(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    feed(monkeypatch, [listing()])
+    monkeypatch.setattr(capture, "save_body_pdf", writes_pdf(session))
+    monkeypatch.setattr(erp, "register", lambda *_a, **_k: "HR-9")
+    monkeypatch.setenv(common.KEEP_ENV, "N")
 
     mail.run(session)
 
