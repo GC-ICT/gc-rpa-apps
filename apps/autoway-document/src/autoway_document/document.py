@@ -15,7 +15,6 @@ from selenium.webdriver.remote.webelement import WebElement
 from gc_rpa_autoway import poppler
 from gc_rpa_core.browser import (
     call_cdp,
-    expand_page,
     find_in_frames,
     here_or_none,
     settled_files,
@@ -193,7 +192,6 @@ def save_attachments(driver: WebDriver, folder: Path, downloads: Path) -> int:
 
 def save_pdf(driver: WebDriver, folder: Path, number: str) -> Path:
     driver.switch_to.default_content()
-    expand_page(driver)
     result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_TIMEOUT)
     encoded = result.get("data") or ""
     if not encoded:

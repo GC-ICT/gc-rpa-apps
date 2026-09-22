@@ -216,7 +216,6 @@ def test_the_window_grows_until_the_body_fits(monkeypatch: pytest.MonkeyPatch) -
         return {}
 
     monkeypatch.setattr(capture, "call_cdp", remember)
-    monkeypatch.setattr(capture, "expand_page", lambda _d: 0)
     monkeypatch.setattr(capture, "content_size", lambda _d: (1600, 9000))
     monkeypatch.setattr(capture, "VIEWPORT_SETTLE", 0)
 
@@ -236,7 +235,6 @@ def test_a_short_body_leaves_the_window_alone(monkeypatch: pytest.MonkeyPatch) -
         return {}
 
     monkeypatch.setattr(capture, "call_cdp", remember)
-    monkeypatch.setattr(capture, "expand_page", lambda _d: 0)
     monkeypatch.setattr(capture, "content_size", lambda _d: (1600, 900))
     monkeypatch.setattr(capture, "VIEWPORT_SETTLE", 0)
 

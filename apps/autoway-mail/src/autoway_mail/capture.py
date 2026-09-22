@@ -15,7 +15,6 @@ from gc_rpa_core.browser import (
     RendererHangError,
     call_cdp,
     close_other_windows,
-    expand_page,
     session_dead,
     settled_files,
     wait_ready,
@@ -283,15 +282,13 @@ def print_media(driver: WebDriver) -> None:
 def lay_out_whole_body(driver: WebDriver) -> tuple[int, int]:
     stretch_viewport(driver, VIEWPORT_HEIGHT)
     print_media(driver)
-    opened = expand_page(driver)
 
     width, height = content_size(driver)
     if height > VIEWPORT_HEIGHT:
         stretch_viewport(driver, min(height + VIEWPORT_MARGIN, VIEWPORT_LIMIT))
-        expand_page(driver)
         width, height = content_size(driver)
 
-    logger.info("      본문 %d x %dpx (펼친 영역 %d곳)", width, height, opened)
+    logger.info("      본문 %d x %dpx", width, height)
     return width, height
 
 

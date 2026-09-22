@@ -35,58 +35,6 @@ SLOW_START_SECONDS = 3.0
 CDP_TIMEOUT = 20.0
 FRAME_POLL = 0.3
 FRAMES = "iframe, frame"
-EXPAND_SETTLE = 0.6
-
-EXPAND_PAGE = """
-var loose = '::-webkit-scrollbar{display:none !important}'
-  + 'html,body{overflow:visible !important;height:auto !important;max-height:none !important}';
-function relax(doc) {
-  var style = doc.createElement('style');
-  style.textContent = loose;
-  (doc.head || doc.documentElement).appendChild(style);
-}
-function unclip(doc) {
-  var view = doc.defaultView || window;
-  var opened = 0;
-  var all = doc.querySelectorAll('*');
-  for (var i = 0; i < all.length; i++) {
-    var box = all[i];
-    if (box.scrollHeight <= box.clientHeight + 4) { continue; }
-    var flow = view.getComputedStyle(box).overflowY;
-    if (flow !== 'auto' && flow !== 'scroll' && flow !== 'hidden') { continue; }
-    box.style.maxHeight = 'none';
-    box.style.height = box.scrollHeight + 'px';
-    box.style.overflow = 'visible';
-    opened++;
-  }
-  return opened;
-}
-function stretch(frame) {
-  var inner = frame.contentDocument;
-  if (!inner || !inner.body) { return 0; }
-  relax(inner);
-  var opened = unclip(inner);
-  var tall = Math.max(inner.body.scrollHeight, inner.documentElement.scrollHeight);
-  var wide = Math.max(inner.body.scrollWidth, inner.documentElement.scrollWidth);
-  frame.setAttribute('scrolling', 'no');
-  frame.style.height = tall + 'px';
-  frame.style.maxHeight = 'none';
-  if (wide > frame.clientWidth) { frame.style.width = wide + 'px'; }
-  return opened;
-}
-var opened = 0;
-for (var pass = 0; pass < 2; pass++) {
-  relax(document);
-  opened += unclip(document);
-  var frames = document.querySelectorAll('iframe, frame');
-  for (var i = 0; i < frames.length; i++) {
-    try { opened += stretch(frames[i]); } catch (e) {}
-  }
-}
-return opened;
-"""
-
-
 OWN_DRIVERS: set[int] = set()
 TERMINATION_SIGNALS = ("SIGINT", "SIGTERM", "SIGBREAK")
 
@@ -352,18 +300,6 @@ def accept_alert(driver: WebDriver, *, timeout: float = ALERT_TIMEOUT) -> bool:
         return False
     driver.switch_to.alert.accept()
     return True
-
-
-def expand_page(driver: WebDriver) -> int:
-    try:
-        opened = int(driver.execute_script(EXPAND_PAGE) or 0)
-    except Exception:
-        logger.debug("본문 펼치기를 건너뜁니다")
-        return 0
-
-    logger.debug("잘려 있던 영역 %d곳을 펼쳤습니다", opened)
-    time.sleep(EXPAND_SETTLE)
-    return opened
 
 
 def settled_files(directory: Path) -> set[Path]:
