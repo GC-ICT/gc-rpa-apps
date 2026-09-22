@@ -250,18 +250,18 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / PDF_NAME
 
-    opened = expand_page(driver)
-    width, height = content_size(driver)
-    logger.info("      본문 %d x %dpx (펼친 영역 %d곳)", width, height, opened)
-
     try:
         call_cdp(
-            driver, "Emulation.setEmulatedMedia", {"media": "screen"}, timeout=PDF_SETUP_TIMEOUT
+            driver, "Emulation.setEmulatedMedia", {"media": "print"}, timeout=PDF_SETUP_TIMEOUT
         )
     except RendererHangError:
         raise
     except Exception:
-        logger.debug("      화면 CSS 적용을 건너뜁니다")
+        logger.debug("      인쇄 CSS 적용을 건너뜁니다")
+
+    opened = expand_page(driver)
+    width, height = content_size(driver)
+    logger.info("      본문 %d x %dpx (펼친 영역 %d곳)", width, height, opened)
 
     result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_PRINT_TIMEOUT)
     encoded = result.get("data") or ""
