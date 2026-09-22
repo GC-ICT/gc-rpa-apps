@@ -58,6 +58,7 @@ def quiet_browser(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(entry, "close_other_windows", lambda *_a, **_k: 0)
     monkeypatch.setattr(site, "login", lambda *_a: None)
     monkeypatch.setattr(config, "usable_database", lambda _settings: erp_database())
+    monkeypatch.setenv(common.APPROVE_ENV, "Y")
     monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: None)
 
 
@@ -114,6 +115,22 @@ def test_one_document_is_approved_and_registered(
     assert steps == ["결재", "등록"]
     assert "2609220007" in sent["finished"]["message"]
     assert "첨부 2건" in sent["finished"]["message"]
+
+
+def test_nothing_is_approved_until_it_is_switched_on(
+    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig, tmp_path: Any
+) -> None:
+    sent: dict[str, Any] = {}
+    steps: list[str] = []
+    monkeypatch.setenv(common.APPROVE_ENV, "N")
+    monkeypatch.setattr(common, "load", lambda: rpa_settings)
+    monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: captured(tmp_path))
+    monkeypatch.setattr(document, "approve", lambda _driver: steps.append("결재"))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
+
+    assert entry.main() == 0
+    assert steps == []
+    assert "내려받음" in sent["finished"]["message"]
 
 
 def test_a_document_is_not_approved_without_an_erp_target(

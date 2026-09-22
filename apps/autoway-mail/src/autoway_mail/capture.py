@@ -16,6 +16,7 @@ from gc_rpa_core.browser import (
     RendererHangError,
     call_cdp,
     close_other_windows,
+    expand_page,
     session_dead,
     settled_files,
     wait_ready,
@@ -35,7 +36,6 @@ POPUP_SETTLE = 0.5
 BODY_TIMEOUT = 15.0
 BODY_MIN_TEXT = 20
 BODY_POLL = 0.5
-EXPAND_SETTLE = 0.6
 
 ATTACHMENT_TIMEOUT = 3.0
 EXPORT_TIMEOUT = 10.0
@@ -61,55 +61,6 @@ A4_HEIGHT = 11.69
 A4_RATIO = A4_HEIGHT / A4_WIDTH
 PIXELS_PER_INCH = 96.0
 PAGE_PADDING = 0.2
-
-EXPAND_PAGE = """
-var loose = '::-webkit-scrollbar{display:none !important}'
-  + 'html,body{overflow:visible !important;height:auto !important;max-height:none !important}';
-function relax(doc) {
-  var style = doc.createElement('style');
-  style.textContent = loose;
-  (doc.head || doc.documentElement).appendChild(style);
-}
-function unclip(doc) {
-  var view = doc.defaultView || window;
-  var opened = 0;
-  var all = doc.querySelectorAll('*');
-  for (var i = 0; i < all.length; i++) {
-    var box = all[i];
-    if (box.scrollHeight <= box.clientHeight + 4) { continue; }
-    var flow = view.getComputedStyle(box).overflowY;
-    if (flow !== 'auto' && flow !== 'scroll' && flow !== 'hidden') { continue; }
-    box.style.maxHeight = 'none';
-    box.style.height = box.scrollHeight + 'px';
-    box.style.overflow = 'visible';
-    opened++;
-  }
-  return opened;
-}
-function stretch(frame) {
-  var inner = frame.contentDocument;
-  if (!inner || !inner.body) { return 0; }
-  relax(inner);
-  var opened = unclip(inner);
-  var tall = Math.max(inner.body.scrollHeight, inner.documentElement.scrollHeight);
-  var wide = Math.max(inner.body.scrollWidth, inner.documentElement.scrollWidth);
-  frame.setAttribute('scrolling', 'no');
-  frame.style.height = tall + 'px';
-  frame.style.maxHeight = 'none';
-  if (wide > frame.clientWidth) { frame.style.width = wide + 'px'; }
-  return opened;
-}
-var opened = 0;
-for (var pass = 0; pass < 2; pass++) {
-  relax(document);
-  opened += unclip(document);
-  var frames = document.querySelectorAll('iframe, frame');
-  for (var i = 0; i < frames.length; i++) {
-    try { opened += stretch(frames[i]); } catch (e) {}
-  }
-}
-return opened;
-"""
 
 MEASURE_PAGE = """
 var doc = document.documentElement;
@@ -327,12 +278,7 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / PDF_NAME
 
-    try:
-        opened = driver.execute_script(EXPAND_PAGE)
-        logger.debug("      잘려 있던 영역 %s곳을 펼쳤습니다", opened)
-        time.sleep(EXPAND_SETTLE)
-    except Exception:
-        logger.debug("      본문 펼치기를 건너뜁니다")
+    expand_page(driver)
 
     try:
         call_cdp(
