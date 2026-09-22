@@ -197,21 +197,22 @@ def sized(monkeypatch: pytest.MonkeyPatch, reported: tuple[float, float]) -> Non
     )
 
 
-def test_the_page_is_as_tall_as_the_body(monkeypatch: pytest.MonkeyPatch) -> None:
-    sized(monkeypatch, (960, 1080))
+def test_a_short_body_stays_on_one_sheet(monkeypatch: pytest.MonkeyPatch) -> None:
+    sized(monkeypatch, (960, 960))
 
-    page = capture.whole_page(FakePage((960, 9600)))  # type: ignore[arg-type]
+    page = capture.whole_page(FakePage((960, 960)))  # type: ignore[arg-type]
 
-    assert page["paperHeight"] == pytest.approx(100.0 + capture.PAGE_PADDING)
+    assert page["paperHeight"] == pytest.approx(10.0 + capture.PAGE_PADDING)
     assert page["paperWidth"] == pytest.approx(10.0 + capture.PAGE_PADDING)
 
 
-def test_a_very_long_body_is_split_into_sheets(monkeypatch: pytest.MonkeyPatch) -> None:
-    sized(monkeypatch, (960, 96000))
+def test_a_long_body_is_split_into_a4_shaped_sheets(monkeypatch: pytest.MonkeyPatch) -> None:
+    sized(monkeypatch, (960, 9600))
 
-    page = capture.whole_page(FakePage((960, 96000)))  # type: ignore[arg-type]
+    page = capture.whole_page(FakePage((960, 9600)))  # type: ignore[arg-type]
 
-    assert page["paperHeight"] == capture.A4_HEIGHT
+    assert page["paperHeight"] == pytest.approx((10.0 + capture.PAGE_PADDING) * capture.A4_RATIO)
+    assert page["paperWidth"] == pytest.approx(10.0 + capture.PAGE_PADDING)
 
 
 def test_an_unmeasurable_page_falls_back_to_a4(monkeypatch: pytest.MonkeyPatch) -> None:

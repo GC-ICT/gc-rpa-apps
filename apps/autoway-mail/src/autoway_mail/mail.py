@@ -167,7 +167,8 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
 
         step = Step.PDF
         pdf = capture.save_body_pdf(session.driver, folder)
-        poppler.to_images(pdf)
+        images = poppler.to_images(pdf)
+        logger.info("      %s (이미지 %d장)", pdf.name, len(images))
 
         step = Step.REGISTER
         folder = hold(session, folder)

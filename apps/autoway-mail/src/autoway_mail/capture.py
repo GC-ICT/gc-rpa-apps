@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import math
 import shutil
 import time
 from pathlib import Path
@@ -57,9 +58,9 @@ PDF_PARAMS = {
 }
 A4_WIDTH = 8.27
 A4_HEIGHT = 11.69
+A4_RATIO = A4_HEIGHT / A4_WIDTH
 PIXELS_PER_INCH = 96.0
 PAGE_PADDING = 0.2
-MAX_PAGE_INCHES = 200.0
 
 EXPAND_PAGE = """
 var loose = '::-webkit-scrollbar{display:none !important}'
@@ -315,9 +316,10 @@ def content_inches(driver: WebDriver) -> tuple[float, float]:
 
 def whole_page(driver: WebDriver) -> dict[str, object]:
     width, height = content_inches(driver)
-    if height > MAX_PAGE_INCHES:
-        logger.info("      본문이 길어 %.0f인치를 여러 장으로 나눠 담습니다", height)
-        height = A4_HEIGHT
+    sheet = width * A4_RATIO
+    if height > sheet:
+        logger.info("      본문을 %d장으로 나눠 담습니다", math.ceil(height / sheet))
+        height = sheet
     return {**PDF_PARAMS, "paperWidth": width, "paperHeight": height, "landscape": False}
 
 
