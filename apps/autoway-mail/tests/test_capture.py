@@ -203,3 +203,32 @@ def test_the_body_size_is_measured() -> None:
 
 def test_an_unmeasurable_body_reads_as_zero() -> None:
     assert capture.content_size(FakePage(None)) == (0, 0)  # type: ignore[arg-type]
+
+
+class FakeButton:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+class FakeToolbar:
+    def __init__(self, texts: list[str]) -> None:
+        self.buttons = [FakeButton(text) for text in texts]
+
+    def find_elements(self, _by: str, _locator: str) -> list[FakeButton]:
+        return self.buttons
+
+
+def test_the_save_button_wins_over_the_open_button() -> None:
+    picked = capture.save_button(FakeToolbar(["열기", "저장"]))  # type: ignore[arg-type]
+
+    assert picked is not None and picked.text == "저장"
+
+
+def test_the_first_button_is_used_when_none_says_save() -> None:
+    picked = capture.save_button(FakeToolbar(["내려받기"]))  # type: ignore[arg-type]
+
+    assert picked is not None and picked.text == "내려받기"
+
+
+def test_no_buttons_means_nothing_to_press() -> None:
+    assert capture.save_button(FakeToolbar([])) is None  # type: ignore[arg-type]

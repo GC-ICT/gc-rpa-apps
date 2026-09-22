@@ -6,8 +6,10 @@ import shutil
 import time
 from pathlib import Path
 
+from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.remote.webelement import WebElement
 
 from autoway_mail import inbox
 from gc_rpa_core.browser import (
@@ -23,6 +25,7 @@ from gc_rpa_core.browser import (
 
 ATTACHMENT_CHECKBOX = "chk_all_box"
 ATTACHMENT_SAVE = "button.l-file__button"
+ATTACHMENT_SAVE_WORD = "저장"
 EXPORT_TOOLBAR = '//button[contains(@onclick,"MailList_btnMsgExport_OnClick")]'
 EXPORT_TOOLBAR_FALLBACK = "button.m-toolbar__button"
 EXPORT_SAVE = (
@@ -126,6 +129,17 @@ def gather_downloads(downloads: Path, folder: Path) -> int:
     return moved
 
 
+def save_button(driver: WebDriver) -> WebElement | None:
+    found = driver.find_elements(By.CSS_SELECTOR, ATTACHMENT_SAVE)
+    for element in found:
+        try:
+            if ATTACHMENT_SAVE_WORD in (element.text or ""):
+                return element
+        except StaleElementReferenceException:
+            continue
+    return found[0] if found else None
+
+
 def save_attachments(driver: WebDriver, folder: Path, downloads: Path) -> int:
     time.sleep(1.0)
     checkbox = inbox.find_within(
@@ -139,10 +153,10 @@ def save_attachments(driver: WebDriver, folder: Path, downloads: Path) -> int:
     inbox.press(driver, checkbox)
     time.sleep(0.5)
 
-    button = inbox.here_or_none(driver, By.CSS_SELECTOR, ATTACHMENT_SAVE)
+    button = save_button(driver)
     if button is None:
         inbox.enter_mail_frame(driver)
-        button = inbox.here_or_none(driver, By.CSS_SELECTOR, ATTACHMENT_SAVE)
+        button = save_button(driver)
     if button is None:
         inbox.enter_mail_frame(driver)
         raise CaptureError("첨부 저장 버튼을 찾지 못했습니다")
