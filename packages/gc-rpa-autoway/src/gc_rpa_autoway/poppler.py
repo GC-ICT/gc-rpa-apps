@@ -54,7 +54,7 @@ def to_images(pdf: Path) -> list[Path]:
         logger.warning("      본문 이미지 변환을 건너뜁니다: %s", exc)
         return []
 
-    written = []
+    written: list[Path] = []
     for page in pages:
         if blank(page):
             continue
