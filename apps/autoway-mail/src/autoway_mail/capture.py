@@ -36,11 +36,11 @@ BODY_TIMEOUT = 15.0
 BODY_MIN_TEXT = 20
 BODY_POLL = 0.5
 
-ATTACHMENT_TIMEOUT = 3.0
+ATTACHMENT_TIMEOUT = 10.0
 EXPORT_TIMEOUT = 10.0
 EXPORT_RETRY_PAUSE = 1.0
 
-DOWNLOAD_START_GRACE = 5.0
+DOWNLOAD_START_GRACE = 30.0
 DOWNLOAD_TIMEOUT = 180.0
 
 PDF_NAME = "document.pdf"
@@ -153,7 +153,10 @@ def save_attachments(driver: WebDriver, folder: Path, downloads: Path) -> int:
     inbox.enter_mail_frame(driver)
     inbox.dismiss_layer(driver)
     saved = gather_downloads(downloads, folder)
-    logger.info("      첨부 %d건", saved)
+    if not saved:
+        logger.warning("      첨부가 있는데 한 건도 내려오지 않았습니다")
+    else:
+        logger.info("      첨부 %d건", saved)
     return saved
 
 
