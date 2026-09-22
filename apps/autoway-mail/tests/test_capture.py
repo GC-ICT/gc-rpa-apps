@@ -179,3 +179,44 @@ def test_a_window_left_open_earlier_is_not_mistaken_for_the_popup(
     capture.focus_popup(driver, {"main", "stray"})  # type: ignore[arg-type]
 
     assert driver.current == "popup"
+
+
+class FakePage:
+    def __init__(self, measured: tuple[float, float]) -> None:
+        self.measured = measured
+
+    def execute_script(self, _script: str) -> list[float]:
+        return list(self.measured)
+
+
+def sized(monkeypatch: pytest.MonkeyPatch, reported: tuple[float, float]) -> None:
+    monkeypatch.setattr(
+        capture,
+        "call_cdp",
+        lambda *_a, **_k: {"cssContentSize": {"width": reported[0], "height": reported[1]}},
+    )
+
+
+def test_the_page_is_as_tall_as_the_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    sized(monkeypatch, (960, 1080))
+
+    page = capture.whole_page(FakePage((960, 9600)))  # type: ignore[arg-type]
+
+    assert page["paperHeight"] == pytest.approx(100.0 + capture.PAGE_PADDING)
+    assert page["paperWidth"] == pytest.approx(10.0 + capture.PAGE_PADDING)
+
+
+def test_a_very_long_body_is_split_into_sheets(monkeypatch: pytest.MonkeyPatch) -> None:
+    sized(monkeypatch, (960, 96000))
+
+    page = capture.whole_page(FakePage((960, 96000)))  # type: ignore[arg-type]
+
+    assert page["paperHeight"] == capture.A4_HEIGHT
+
+
+def test_an_unmeasurable_page_falls_back_to_a4(monkeypatch: pytest.MonkeyPatch) -> None:
+    sized(monkeypatch, (0, 0))
+
+    page = capture.whole_page(FakePage((0, 0)))  # type: ignore[arg-type]
+
+    assert (page["paperWidth"], page["paperHeight"]) == (capture.A4_WIDTH, capture.A4_HEIGHT)

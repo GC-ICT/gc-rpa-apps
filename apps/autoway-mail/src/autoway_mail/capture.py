@@ -69,22 +69,54 @@ function relax(doc) {
   style.textContent = loose;
   (doc.head || doc.documentElement).appendChild(style);
 }
-relax(document);
-var frames = document.querySelectorAll('iframe, frame');
-for (var i = 0; i < frames.length; i++) {
-  try {
-    var inner = frames[i].contentDocument;
-    if (!inner || !inner.body) { continue; }
-    relax(inner);
-    var tall = Math.max(inner.body.scrollHeight, inner.documentElement.scrollHeight);
-    var wide = Math.max(inner.body.scrollWidth, inner.documentElement.scrollWidth);
-    frames[i].setAttribute('scrolling', 'no');
-    frames[i].style.height = tall + 'px';
-    frames[i].style.maxHeight = 'none';
-    if (wide > frames[i].clientWidth) { frames[i].style.width = wide + 'px'; }
-  } catch (e) {}
+function unclip(doc) {
+  var view = doc.defaultView || window;
+  var opened = 0;
+  var all = doc.querySelectorAll('*');
+  for (var i = 0; i < all.length; i++) {
+    var box = all[i];
+    if (box.scrollHeight <= box.clientHeight + 4) { continue; }
+    var flow = view.getComputedStyle(box).overflowY;
+    if (flow !== 'auto' && flow !== 'scroll' && flow !== 'hidden') { continue; }
+    box.style.maxHeight = 'none';
+    box.style.height = box.scrollHeight + 'px';
+    box.style.overflow = 'visible';
+    opened++;
+  }
+  return opened;
 }
-return frames.length;
+function stretch(frame) {
+  var inner = frame.contentDocument;
+  if (!inner || !inner.body) { return 0; }
+  relax(inner);
+  var opened = unclip(inner);
+  var tall = Math.max(inner.body.scrollHeight, inner.documentElement.scrollHeight);
+  var wide = Math.max(inner.body.scrollWidth, inner.documentElement.scrollWidth);
+  frame.setAttribute('scrolling', 'no');
+  frame.style.height = tall + 'px';
+  frame.style.maxHeight = 'none';
+  if (wide > frame.clientWidth) { frame.style.width = wide + 'px'; }
+  return opened;
+}
+var opened = 0;
+for (var pass = 0; pass < 2; pass++) {
+  relax(document);
+  opened += unclip(document);
+  var frames = document.querySelectorAll('iframe, frame');
+  for (var i = 0; i < frames.length; i++) {
+    try { opened += stretch(frames[i]); } catch (e) {}
+  }
+}
+return opened;
+"""
+
+MEASURE_PAGE = """
+var doc = document.documentElement;
+var body = document.body;
+return [
+  Math.max(doc.scrollWidth, doc.offsetWidth, body ? body.scrollWidth : 0),
+  Math.max(doc.scrollHeight, doc.offsetHeight, body ? body.scrollHeight : 0)
+];
 """
 
 logger = logging.getLogger(__name__)
@@ -257,21 +289,35 @@ def focus_popup(driver: WebDriver, before: set[str], *, timeout: float = POPUP_T
     raise CaptureError(f"본문 팝업 창이 {timeout:g}초 안에 열리지 않았습니다")
 
 
-def content_inches(driver: WebDriver) -> tuple[float, float]:
+def measured_pixels(driver: WebDriver) -> tuple[float, float]:
+    try:
+        width, height = driver.execute_script(MEASURE_PAGE)
+    except Exception:
+        return 0.0, 0.0
+    return float(width or 0), float(height or 0)
+
+
+def reported_pixels(driver: WebDriver) -> tuple[float, float]:
     metrics = call_cdp(driver, "Page.getLayoutMetrics", {}, timeout=PDF_SETUP_TIMEOUT)
     content = metrics.get("cssContentSize") or metrics.get("contentSize") or {}
-    width = float(content.get("width") or 0) / PIXELS_PER_INCH
-    height = float(content.get("height") or 0) / PIXELS_PER_INCH
+    return float(content.get("width") or 0), float(content.get("height") or 0)
+
+
+def content_inches(driver: WebDriver) -> tuple[float, float]:
+    reported = reported_pixels(driver)
+    measured = measured_pixels(driver)
+    width = max(reported[0], measured[0]) / PIXELS_PER_INCH
+    height = max(reported[1], measured[1]) / PIXELS_PER_INCH
     if not width or not height:
         return A4_WIDTH, A4_HEIGHT
-    if height > MAX_PAGE_INCHES:
-        logger.warning("      본문이 길어 %g인치까지만 담습니다", MAX_PAGE_INCHES)
-        height = MAX_PAGE_INCHES
     return width + PAGE_PADDING, height + PAGE_PADDING
 
 
 def whole_page(driver: WebDriver) -> dict[str, object]:
     width, height = content_inches(driver)
+    if height > MAX_PAGE_INCHES:
+        logger.info("      본문이 길어 %.0f인치를 여러 장으로 나눠 담습니다", height)
+        height = A4_HEIGHT
     return {**PDF_PARAMS, "paperWidth": width, "paperHeight": height, "landscape": False}
 
 
@@ -280,8 +326,8 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     path = folder / PDF_NAME
 
     try:
-        frames = driver.execute_script(EXPAND_PAGE)
-        logger.debug("      본문 프레임 %s개를 펼쳤습니다", frames)
+        opened = driver.execute_script(EXPAND_PAGE)
+        logger.debug("      잘려 있던 영역 %s곳을 펼쳤습니다", opened)
         time.sleep(EXPAND_SETTLE)
     except Exception:
         logger.debug("      본문 펼치기를 건너뜁니다")
