@@ -6,6 +6,12 @@ from autoway_mail import inbox
 from autoway_mail.inbox import Listing
 
 
+@pytest.fixture(autouse=True)
+def brisk(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inbox, "READ_SENDER_TIMEOUT", 0.0)
+    monkeypatch.setattr(inbox, "READ_SENDER_POLL", 0.0)
+
+
 def listing(**fields: str) -> Listing:
     return Listing(element=object(), **fields)  # type: ignore[arg-type]
 
@@ -265,3 +271,28 @@ def test_a_dead_session_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(RuntimeError, match="invalid session id"):
         inbox.listing_at(object(), 0)  # type: ignore[arg-type]
+
+
+class SlowPane:
+    def __init__(self, names: list[str]) -> None:
+        self.names = names
+
+    def find_element(self, by: str, locator: str) -> Any:
+        from selenium.common.exceptions import NoSuchElementException
+
+        if locator != inbox.READ_SENDER:
+            raise NoSuchElementException(locator)
+        return FakeText(self.names.pop(0) if self.names else "")
+
+
+def test_the_pane_is_read_again_until_the_name_shows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inbox, "READ_SENDER_POLL", 0)
+    slow = SlowPane(["", "", "보낸이"])
+
+    assert inbox.pane_sender(slow, timeout=5.0) == "보낸이"  # type: ignore[arg-type]
+
+
+def test_a_pane_that_never_names_anyone_gives_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inbox, "READ_SENDER_POLL", 0)
+
+    assert inbox.pane_sender(SlowPane([]), timeout=0.05) == ""  # type: ignore[arg-type]

@@ -64,6 +64,8 @@ SCROLL_LIMIT = 20
 LIST_ATTEMPTS = 5
 LIST_RETRY_PAUSE = 1.0
 READ_PANE_TIMEOUT = 10.0
+READ_SENDER_TIMEOUT = 5.0
+READ_SENDER_POLL = 0.3
 MODULE_TIMEOUT = 20.0
 
 logger = logging.getLogger(__name__)
@@ -300,6 +302,16 @@ def pane_text(driver: WebDriver, locator: str, what: str) -> str:
     return found.text
 
 
+def pane_sender(driver: WebDriver, *, timeout: float | None = None) -> str:
+    deadline = time.monotonic() + (READ_SENDER_TIMEOUT if timeout is None else timeout)
+    while True:
+        shown = here_or_none(driver, By.CSS_SELECTOR, READ_SENDER)
+        name = display_name(shown.text) if shown is not None else ""
+        if name or time.monotonic() >= deadline:
+            return name
+        time.sleep(READ_SENDER_POLL)
+
+
 def fill_missing(driver: WebDriver, listing: Listing) -> bool:
     filled = False
     if not listing.subject:
@@ -309,8 +321,7 @@ def fill_missing(driver: WebDriver, listing: Listing) -> bool:
         listing.received_at = pane_text(driver, READ_DATE, "수신일시")
         filled = True
 
-    shown = here_or_none(driver, By.CSS_SELECTOR, READ_SENDER)
-    name = display_name(shown.text) if shown is not None else ""
+    name = pane_sender(driver)
     if name and not listing.sender_name:
         listing.sender_name = name
         filled = True
