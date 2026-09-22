@@ -125,6 +125,8 @@ def file_row(document_no: str, slot: int, path: Path) -> tuple[Any, ...]:
 
 def answered(row: Any) -> tuple[str, str]:
     values = list(row.values()) if isinstance(row, dict) else list(row)
+    if len(values) == 1:
+        return HEADER_OK, str(values[0] or "").strip()
     return str(values[0] or "").strip().upper(), str(values[1] or "").strip()
 
 

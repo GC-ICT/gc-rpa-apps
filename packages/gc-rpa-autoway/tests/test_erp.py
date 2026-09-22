@@ -331,3 +331,11 @@ def test_the_file_insert_carries_every_audit_column() -> None:
 
     assert "NEWID()" in statement
     assert statement.count("GETDATE()") == 2
+
+
+def test_a_procedure_that_returns_only_a_number_counts_as_success() -> None:
+    assert erp.answered(("2609220001",)) == (erp.HEADER_OK, "2609220001")
+
+
+def test_a_procedure_that_answers_with_a_result_is_read_as_before() -> None:
+    assert erp.answered(("ok", "2609220002")) == ("OK", "2609220002")
