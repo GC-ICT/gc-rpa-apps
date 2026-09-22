@@ -39,9 +39,15 @@ BODY_POLL = 0.5
 ATTACHMENT_TIMEOUT = 3.0
 EXPORT_TIMEOUT = 10.0
 EXPORT_RETRY_PAUSE = 1.0
+VIEWPORT_SETTLE = 0.8
 
 DOWNLOAD_START_GRACE = 5.0
 DOWNLOAD_TIMEOUT = 180.0
+
+VIEWPORT_WIDTH = 1600
+VIEWPORT_HEIGHT = 4000
+VIEWPORT_MARGIN = 200
+VIEWPORT_LIMIT = 30000
 
 PDF_NAME = "document.pdf"
 PDF_SETUP_TIMEOUT = 5.0
@@ -246,10 +252,24 @@ def content_size(driver: WebDriver) -> tuple[int, int]:
     return int(width or 0), int(height or 0)
 
 
-def write_pdf(driver: WebDriver, folder: Path) -> Path:
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / PDF_NAME
+def stretch_viewport(driver: WebDriver, height: int) -> None:
+    call_cdp(
+        driver,
+        "Emulation.setDeviceMetricsOverride",
+        {"width": VIEWPORT_WIDTH, "height": height, "deviceScaleFactor": 1, "mobile": False},
+        timeout=PDF_SETUP_TIMEOUT,
+    )
+    time.sleep(VIEWPORT_SETTLE)
 
+
+def release_viewport(driver: WebDriver) -> None:
+    try:
+        call_cdp(driver, "Emulation.clearDeviceMetricsOverride", {}, timeout=PDF_SETUP_TIMEOUT)
+    except Exception:
+        logger.debug("      창 크기를 되돌리지 못했습니다")
+
+
+def print_media(driver: WebDriver) -> None:
     try:
         call_cdp(
             driver, "Emulation.setEmulatedMedia", {"media": "print"}, timeout=PDF_SETUP_TIMEOUT
@@ -259,11 +279,32 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     except Exception:
         logger.debug("      인쇄 CSS 적용을 건너뜁니다")
 
-    opened = expand_page(driver)
-    width, height = content_size(driver)
-    logger.info("      본문 %d x %dpx (펼친 영역 %d곳)", width, height, opened)
 
-    result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_PRINT_TIMEOUT)
+def lay_out_whole_body(driver: WebDriver) -> tuple[int, int]:
+    stretch_viewport(driver, VIEWPORT_HEIGHT)
+    print_media(driver)
+    opened = expand_page(driver)
+
+    width, height = content_size(driver)
+    if height > VIEWPORT_HEIGHT:
+        stretch_viewport(driver, min(height + VIEWPORT_MARGIN, VIEWPORT_LIMIT))
+        expand_page(driver)
+        width, height = content_size(driver)
+
+    logger.info("      본문 %d x %dpx (펼친 영역 %d곳)", width, height, opened)
+    return width, height
+
+
+def write_pdf(driver: WebDriver, folder: Path) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / PDF_NAME
+
+    try:
+        lay_out_whole_body(driver)
+        result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_PRINT_TIMEOUT)
+    finally:
+        release_viewport(driver)
+
     encoded = result.get("data") or ""
     if not encoded:
         raise CaptureError("Page.printToPDF 가 빈 결과를 돌려주었습니다")

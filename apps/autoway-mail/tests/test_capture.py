@@ -203,3 +203,43 @@ def test_the_body_size_is_measured() -> None:
 
 def test_an_unmeasurable_body_reads_as_zero() -> None:
     assert capture.content_size(FakePage(None)) == (0, 0)  # type: ignore[arg-type]
+
+
+def test_the_window_grows_until_the_body_fits(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[int] = []
+
+    def remember(
+        _driver: object, command: str, params: dict[str, int], **_k: object
+    ) -> dict[str, str]:
+        if command == "Emulation.setDeviceMetricsOverride":
+            asked.append(params["height"])
+        return {}
+
+    monkeypatch.setattr(capture, "call_cdp", remember)
+    monkeypatch.setattr(capture, "expand_page", lambda _d: 0)
+    monkeypatch.setattr(capture, "content_size", lambda _d: (1600, 9000))
+    monkeypatch.setattr(capture, "VIEWPORT_SETTLE", 0)
+
+    capture.lay_out_whole_body(object())  # type: ignore[arg-type]
+
+    assert asked == [capture.VIEWPORT_HEIGHT, 9000 + capture.VIEWPORT_MARGIN]
+
+
+def test_a_short_body_leaves_the_window_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[int] = []
+
+    def remember(
+        _driver: object, command: str, params: dict[str, int], **_k: object
+    ) -> dict[str, str]:
+        if command == "Emulation.setDeviceMetricsOverride":
+            asked.append(params["height"])
+        return {}
+
+    monkeypatch.setattr(capture, "call_cdp", remember)
+    monkeypatch.setattr(capture, "expand_page", lambda _d: 0)
+    monkeypatch.setattr(capture, "content_size", lambda _d: (1600, 900))
+    monkeypatch.setattr(capture, "VIEWPORT_SETTLE", 0)
+
+    capture.lay_out_whole_body(object())  # type: ignore[arg-type]
+
+    assert asked == [capture.VIEWPORT_HEIGHT]
