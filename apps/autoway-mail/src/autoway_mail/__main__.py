@@ -68,6 +68,7 @@ def job(run: app.Run) -> app.Done:
             downloads=downloads,
             store=store,
             report=run.step,
+            keep_folders=common.keeping(),
         )
         tally = mail.run(session)
         report_leftovers(store)

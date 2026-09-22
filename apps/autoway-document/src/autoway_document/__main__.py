@@ -7,7 +7,7 @@ from autoway_document import common, document
 from gc_rpa_autoway import erp, poppler, site
 from gc_rpa_core import app, config
 from gc_rpa_core import workspace as folders
-from gc_rpa_core.browser import chrome, clean_up_browsers_on_exit, close_other_windows
+from gc_rpa_core.browser import chrome, clean_up_browsers_on_exit
 from gc_rpa_core.report import start_logging
 
 FALLBACK_SYSTEM = "autoway-document"
@@ -21,24 +21,13 @@ def warn_about_poppler() -> None:
         logger.warning("      %s", complaint)
 
 
-def erp_target(settings: config.RpaConfig) -> erp.Target | None:
-    try:
-        target = erp.target(config.usable_database(settings), key_column=common.ERP_KEY_COLUMN)
-    except (LookupError, erp.ErpError) as exc:
-        logger.warning("      ERP 등록 설정이 없어 결재 없이 내려받기만 합니다: %s", exc)
-        return None
-
+def erp_target(settings: config.RpaConfig) -> erp.Target:
+    target = erp.target(config.usable_database(settings), key_column=common.ERP_KEY_COLUMN)
     logger.info("      ERP 등록 %s / %s", target.endpoint.database, target.file_table)
     return target
 
 
-def finish(taken: document.Captured, target: erp.Target | None) -> app.Done:
-    if target is None:
-        return app.Done(
-            f"{taken.document.number} 내려받음 (첨부 {taken.attachments}건)",
-            note=f"받은 곳: {taken.folder}  ※ 결재·ERP 등록은 하지 않았습니다",
-        )
-
+def finish(taken: document.Captured, target: erp.Target) -> app.Done:
     document_no = erp.register(
         taken.folder,
         sender=taken.document.sender,
@@ -74,12 +63,8 @@ def job(run: app.Run) -> app.Done:
         if taken is None:
             return app.Done("결재할 문서가 없습니다")
 
-        if target is not None:
-            document.approve(driver)
-        done = finish(taken, target)
-        close_other_windows(driver, taken.approvals)
-
-    return done
+        document.approve(driver)
+        return finish(taken, target)
 
 
 def main() -> int:

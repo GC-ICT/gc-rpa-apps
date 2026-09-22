@@ -9,7 +9,7 @@ from pathlib import Path
 
 from selenium.webdriver.remote.webdriver import WebDriver
 
-from autoway_mail import capture, common, history, inbox
+from autoway_mail import capture, history, inbox
 from gc_rpa_autoway import erp, poppler
 from gc_rpa_core import config
 from gc_rpa_core.browser import RendererHangError, close_other_windows, session_dead
@@ -78,6 +78,7 @@ class Session:
     downloads: Path
     store: history.History
     report: Callable[[str], None] = lambda _: None
+    keep_folders: bool = False
 
     @property
     def failed_dir(self) -> Path:
@@ -122,7 +123,7 @@ def keep_failure(session: Session, folder: Path | None) -> None:
     if folder is None or not folder.is_dir():
         return
     try:
-        capture.gather_downloads(session.downloads, folder)
+        capture.gather_downloads(session.downloads, folder, grace_seconds=0)
         kept = unique_dir(session.failed_dir, folder.name)
         shutil.move(str(folder), str(kept))
         logger.info("      실패 폴더를 보관했습니다: %s", kept)
@@ -167,8 +168,7 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
 
         step = Step.PDF
         pdf = capture.save_body_pdf(session.driver, folder)
-        images = poppler.to_images(pdf)
-        logger.info("      %s (이미지 %d장)", pdf.name, len(images))
+        poppler.to_images(pdf)
 
         step = Step.REGISTER
         folder = hold(session, folder)
@@ -180,7 +180,7 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
         )
         if listing.key:
             session.store.mark_registered(listing.key, document_no)
-        if common.keeping():
+        if session.keep_folders:
             logger.info("      올린 폴더를 남겨둡니다: %s", folder)
         else:
             discard(folder)

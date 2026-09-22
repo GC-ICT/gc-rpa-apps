@@ -65,4 +65,5 @@ def to_images(pdf: Path) -> list[Path]:
     skipped = len(pages) - len(written)
     if skipped:
         logger.info("      빈 페이지 %d장은 건너뛰었습니다", skipped)
+    logger.info("      %s (이미지 %d장)", pdf.name, len(written))
     return written

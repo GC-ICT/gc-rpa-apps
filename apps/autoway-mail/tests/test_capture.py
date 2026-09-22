@@ -182,53 +182,9 @@ def test_a_window_left_open_earlier_is_not_mistaken_for_the_popup(
 
 
 def test_the_body_is_printed_on_a4_sheets_on_their_side() -> None:
-    assert capture.PDF_PARAMS["landscape"] is True
-    assert (capture.PDF_PARAMS["paperWidth"], capture.PDF_PARAMS["paperHeight"]) == (11.69, 8.27)
-    assert capture.PDF_PARAMS["scale"] == 0.95
-
-
-class FakePage:
-    def __init__(self, size: tuple[int, int] | None) -> None:
-        self.size = size
-
-    def execute_script(self, _script: str) -> list[int]:
-        if self.size is None:
-            raise RuntimeError("스크립트를 돌리지 못했습니다")
-        return list(self.size)
-
-
-def test_the_body_size_is_measured() -> None:
-    assert capture.content_size(FakePage((1900, 4200))) == (1900, 4200)  # type: ignore[arg-type]
-
-
-def test_an_unmeasurable_body_reads_as_zero() -> None:
-    assert capture.content_size(FakePage(None)) == (0, 0)  # type: ignore[arg-type]
-
-
-class FakeButton:
-    def __init__(self, text: str) -> None:
-        self.text = text
-
-
-class FakeToolbar:
-    def __init__(self, texts: list[str]) -> None:
-        self.buttons = [FakeButton(text) for text in texts]
-
-    def find_elements(self, _by: str, _locator: str) -> list[FakeButton]:
-        return self.buttons
-
-
-def test_the_save_button_wins_over_the_open_button() -> None:
-    picked = capture.save_button(FakeToolbar(["열기", "저장"]))  # type: ignore[arg-type]
-
-    assert picked is not None and picked.text == "저장"
-
-
-def test_the_first_button_is_used_when_none_says_save() -> None:
-    picked = capture.save_button(FakeToolbar(["내려받기"]))  # type: ignore[arg-type]
-
-    assert picked is not None and picked.text == "내려받기"
-
-
-def test_no_buttons_means_nothing_to_press() -> None:
-    assert capture.save_button(FakeToolbar([])) is None  # type: ignore[arg-type]
+    assert capture.A4_LANDSCAPE["landscape"] is True
+    assert (capture.A4_LANDSCAPE["paperWidth"], capture.A4_LANDSCAPE["paperHeight"]) == (
+        11.69,
+        8.27,
+    )
+    assert capture.A4_LANDSCAPE["scale"] == 0.95

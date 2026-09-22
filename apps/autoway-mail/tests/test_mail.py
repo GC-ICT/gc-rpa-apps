@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from autoway_mail import capture, common, history, inbox, mail
+from autoway_mail import capture, history, inbox, mail
 from autoway_mail.inbox import Listing
 from autoway_mail.mail import Outcome, Session, Step, StepError, Tally
 from gc_rpa_autoway import erp, poppler
@@ -319,7 +319,7 @@ def test_an_uploaded_folder_is_kept_for_checking(
     feed(monkeypatch, [listing()])
     monkeypatch.setattr(capture, "save_body_pdf", writes_pdf(session))
     monkeypatch.setattr(erp, "register", lambda *_a, **_k: "HR-9")
-    monkeypatch.setenv(common.KEEP_ENV, "Y")
+    session.keep_folders = True
 
     mail.run(session)
 
@@ -332,7 +332,7 @@ def test_an_uploaded_folder_is_removed_when_asked(
     feed(monkeypatch, [listing()])
     monkeypatch.setattr(capture, "save_body_pdf", writes_pdf(session))
     monkeypatch.setattr(erp, "register", lambda *_a, **_k: "HR-9")
-    monkeypatch.setenv(common.KEEP_ENV, "N")
+    session.keep_folders = False
 
     mail.run(session)
 

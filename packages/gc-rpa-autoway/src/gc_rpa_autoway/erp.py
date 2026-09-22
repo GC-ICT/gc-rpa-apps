@@ -124,10 +124,10 @@ def file_row(document_no: str, slot: int, path: Path) -> tuple[Any, ...]:
 
 
 def answered(row: Any) -> tuple[str, str]:
-    values = list(row.values()) if isinstance(row, dict) else list(row)
+    values = [str(value or "").strip() for value in row]
     if len(values) == 1:
-        return HEADER_OK, str(values[0] or "").strip()
-    return str(values[0] or "").strip().upper(), str(values[1] or "").strip()
+        return HEADER_OK, values[0]
+    return values[0].upper(), values[1]
 
 
 def call_header(opened: Any, header: str, *, sender: str, subject: str, accepted_on: date) -> str:

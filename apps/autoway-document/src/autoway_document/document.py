@@ -14,6 +14,7 @@ from selenium.webdriver.remote.webelement import WebElement
 
 from gc_rpa_autoway import poppler
 from gc_rpa_core.browser import (
+    A4_LANDSCAPE,
     call_cdp,
     find_in_frames,
     here_or_none,
@@ -41,6 +42,7 @@ SAVE_ALL_BUTTON = '//button[.//span[normalize-space(text())="모두저장"]]'
 APPROVE_BUTTON = '//button[.//span[normalize-space(text())="결재"]]'
 AUTHORIZE_RADIO = 'input.ant-radio-input[type="radio"][value="AUTHORIZE"]'
 CONFIRM_BUTTON = '//button[.//span[normalize-space(text())="확인"]]'
+TOOLBAR_WORDS = ("결재", "반송", "공람자", "결재선 보기", "수신부서 접수확인", "유용한 기능")
 DISABLED_MARKS = ("true", "1", "yes")
 ARCHIVE_SUFFIX = ".zip"
 
@@ -56,18 +58,6 @@ DIALOG_SETTLE = 3.5
 CHOICE_SETTLE = 1.5
 APPROVE_SETTLE = 3.0
 
-PDF_PARAMS = {
-    "landscape": True,
-    "printBackground": True,
-    "preferCSSPageSize": False,
-    "paperWidth": 11.69,
-    "paperHeight": 8.27,
-    "marginTop": 0.2,
-    "marginBottom": 0.2,
-    "marginLeft": 0.2,
-    "marginRight": 0.2,
-    "scale": 0.95,
-}
 PDF_TIMEOUT = 60.0
 
 logger = logging.getLogger(__name__)
@@ -86,7 +76,6 @@ class Document:
 
 @dataclass(frozen=True)
 class Captured:
-    approvals: str
     document: Document
     folder: Path
     attachments: int
@@ -195,8 +184,8 @@ def save_attachments(driver: WebDriver, folder: Path, downloads: Path) -> int:
 def save_pdf(driver: WebDriver, folder: Path, number: str) -> Path:
     driver.switch_to.default_content()
     open_body_frame(driver)
-    logger.info("      버튼 줄 %d곳을 숨겼습니다", hide_toolbars(driver))
-    result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_TIMEOUT)
+    logger.info("      버튼 줄 %d곳을 숨겼습니다", hide_toolbars(driver, TOOLBAR_WORDS))
+    result = call_cdp(driver, "Page.printToPDF", A4_LANDSCAPE, timeout=PDF_TIMEOUT)
     encoded = result.get("data") or ""
     if not encoded:
         raise DocumentError("Page.printToPDF 가 빈 결과를 돌려주었습니다")
@@ -233,7 +222,6 @@ def capture_one(driver: WebDriver, *, workspace: Path, downloads: Path) -> Captu
         logger.info("      결재할 문서가 없습니다")
         return None
 
-    main = driver.current_window_handle
     open_detail(driver, row)
     document = read_document(driver)
     logger.info("      %s / %s / %s", document.number, document.sender, document.title)
@@ -243,10 +231,8 @@ def capture_one(driver: WebDriver, *, workspace: Path, downloads: Path) -> Captu
     attachments = save_attachments(driver, folder, downloads)
     pdf = save_pdf(driver, folder, document.number)
     images = poppler.to_images(pdf)
-    logger.info("      %s (이미지 %d장)", pdf.name, len(images))
 
     return Captured(
-        approvals=main,
         document=document,
         folder=folder,
         attachments=attachments,

@@ -306,9 +306,9 @@ def pane_sender(driver: WebDriver, *, timeout: float | None = None) -> str:
     deadline = time.monotonic() + (READ_SENDER_TIMEOUT if timeout is None else timeout)
     while True:
         shown = here_or_none(driver, By.CSS_SELECTOR, READ_SENDER)
-        name = display_name(shown.text) if shown is not None else ""
-        if name or time.monotonic() >= deadline:
-            return name
+        text = shown.text.strip() if shown is not None else ""
+        if text or time.monotonic() >= deadline:
+            return display_name(text)
         time.sleep(READ_SENDER_POLL)
 
 
@@ -321,10 +321,9 @@ def fill_missing(driver: WebDriver, listing: Listing) -> bool:
         listing.received_at = pane_text(driver, READ_DATE, "수신일시")
         filled = True
 
-    name = pane_sender(driver)
-    if name and not listing.sender_name:
-        listing.sender_name = name
-        filled = True
+    if not listing.sender_name:
+        listing.sender_name = pane_sender(driver)
+        filled = filled or bool(listing.sender_name)
     return filled
 
 

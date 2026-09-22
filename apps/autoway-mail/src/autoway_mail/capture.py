@@ -13,6 +13,7 @@ from selenium.webdriver.remote.webelement import WebElement
 
 from autoway_mail import inbox
 from gc_rpa_core.browser import (
+    A4_LANDSCAPE,
     PARTIAL_SUFFIXES,
     RendererHangError,
     call_cdp,
@@ -46,6 +47,9 @@ EXPORT_RETRY_PAUSE = 2.0
 DOWNLOAD_START_GRACE = 30.0
 DOWNLOAD_TIMEOUT = 600.0
 
+PDF_NAME = "document.pdf"
+PDF_SETUP_TIMEOUT = 10.0
+PDF_PRINT_TIMEOUT = 60.0
 PDF_NAME = "document.pdf"
 PDF_SETUP_TIMEOUT = 10.0
 PDF_PRINT_TIMEOUT = 60.0
@@ -84,15 +88,6 @@ for (var i = 0; i < frames.length; i++) {
 return best;
 """
 
-MEASURE_PAGE = """
-var doc = document.documentElement;
-var body = document.body;
-return [
-  Math.max(doc.scrollWidth, body ? body.scrollWidth : 0),
-  Math.max(doc.scrollHeight, body ? body.scrollHeight : 0)
-];
-"""
-
 logger = logging.getLogger(__name__)
 
 
@@ -104,8 +99,8 @@ def downloading(downloads: Path) -> bool:
     return any(path.name.endswith(PARTIAL_SUFFIXES) for path in downloads.iterdir())
 
 
-def wait_for_downloads(downloads: Path) -> None:
-    grace = time.monotonic() + DOWNLOAD_START_GRACE
+def wait_for_downloads(downloads: Path, *, grace_seconds: float | None = None) -> None:
+    grace = time.monotonic() + (DOWNLOAD_START_GRACE if grace_seconds is None else grace_seconds)
     while time.monotonic() < grace:
         if downloading(downloads) or settled_files(downloads):
             break
@@ -120,8 +115,8 @@ def wait_for_downloads(downloads: Path) -> None:
         time.sleep(0.5)
 
 
-def gather_downloads(downloads: Path, folder: Path) -> int:
-    wait_for_downloads(downloads)
+def gather_downloads(downloads: Path, folder: Path, *, grace_seconds: float | None = None) -> int:
+    wait_for_downloads(downloads, grace_seconds=grace_seconds)
     moved = 0
     for path in sorted(settled_files(downloads)):
         shutil.move(str(path), str(folder / path.name))
@@ -277,14 +272,6 @@ def focus_popup(driver: WebDriver, before: set[str], *, timeout: float = POPUP_T
     raise CaptureError(f"본문 팝업 창이 {timeout:g}초 안에 열리지 않았습니다")
 
 
-def content_size(driver: WebDriver) -> tuple[int, int]:
-    try:
-        width, height = driver.execute_script(MEASURE_PAGE)
-    except Exception:
-        return 0, 0
-    return int(width or 0), int(height or 0)
-
-
 def print_media(driver: WebDriver) -> None:
     try:
         call_cdp(
@@ -308,9 +295,7 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     path = folder / PDF_NAME
 
     print_media(driver)
-    tall = open_body_frame(driver)
-    logger.info("      본문 %d x %dpx (본문틀 %dpx)", *content_size(driver), tall)
-    result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_PRINT_TIMEOUT)
+    result = call_cdp(driver, "Page.printToPDF", A4_LANDSCAPE, timeout=PDF_PRINT_TIMEOUT)
 
     encoded = result.get("data") or ""
     if not encoded:
@@ -326,6 +311,7 @@ def write_body_pdf(driver: WebDriver, folder: Path) -> Path:
     url = body_frame_url(driver)
     if not url:
         logger.info("      본문 주소를 찾지 못해 팝업 화면을 그대로 담습니다")
+        open_body_frame(driver)
         return write_pdf(driver, folder)
 
     popup = driver.current_window_handle

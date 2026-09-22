@@ -207,22 +207,21 @@ def test_a_page_that_refuses_scripts_hides_nothing() -> None:
     from gc_rpa_core import browser
 
     class Stubborn:
-        def execute_script(self, _script: str) -> int:
+        def execute_script(self, _script: str, *_args: object) -> int:
             raise RuntimeError("스크립트를 막았습니다")
 
-    assert browser.hide_toolbars(Stubborn()) == 0  # type: ignore[arg-type]
+    assert browser.hide_toolbars(Stubborn(), ("결재",)) == 0  # type: ignore[arg-type]
 
 
 def test_the_toolbar_words_reach_the_script() -> None:
     from gc_rpa_core import browser
 
-    seen: list[str] = []
+    seen: list[object] = []
 
     class Page:
-        def execute_script(self, script: str) -> int:
-            seen.append(script)
+        def execute_script(self, _script: str, *args: object) -> int:
+            seen.extend(args)
             return 2
 
-    assert browser.hide_toolbars(Page()) == 2  # type: ignore[arg-type]
-    assert "결재" in seen[0]
-    assert "MARKS" not in seen[0]
+    assert browser.hide_toolbars(Page(), ("결재", "반송")) == 2  # type: ignore[arg-type]
+    assert seen == [["결재", "반송"], browser.TOOLBAR_TEXT_LIMIT]

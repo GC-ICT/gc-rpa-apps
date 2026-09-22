@@ -8,7 +8,7 @@ import signal
 import subprocess
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -35,14 +35,25 @@ SLOW_START_SECONDS = 3.0
 CDP_TIMEOUT = 40.0
 FRAME_POLL = 0.3
 FRAMES = "iframe, frame"
-TOOLBAR_WORDS = ("결재", "반송", "공람자", "결재선", "접수확인", "유용한 기능")
 TOOLBAR_TEXT_LIMIT = 80
+A4_LANDSCAPE = {
+    "landscape": True,
+    "printBackground": True,
+    "preferCSSPageSize": False,
+    "paperWidth": 11.69,
+    "paperHeight": 8.27,
+    "marginTop": 0.2,
+    "marginBottom": 0.2,
+    "marginLeft": 0.2,
+    "marginRight": 0.2,
+    "scale": 0.95,
+}
 BODY_FALLBACK = 6000
 BODY_SETTLE = 1.5
 
 HIDE_TOOLBARS = """
-var marks = MARKS;
-var limit = LIMIT;
+var marks = arguments[0];
+var limit = arguments[1];
 var hidden = 0;
 var buttons = document.querySelectorAll('button, a');
 for (var i = 0; i < buttons.length; i++) {
@@ -88,7 +99,7 @@ try {
 
 body.setAttribute('scrolling', 'no');
 body.style.maxHeight = 'none';
-body.style.height = (tall || FALLBACK) + 'px';
+body.style.height = (tall || arguments[0]) + 'px';
 
 var parent = body.parentElement;
 while (parent && parent !== document.body) {
@@ -367,12 +378,9 @@ def accept_alert(driver: WebDriver, *, timeout: float = ALERT_TIMEOUT) -> bool:
     return True
 
 
-def hide_toolbars(driver: WebDriver) -> int:
-    script = HIDE_TOOLBARS.replace("MARKS", str(list(TOOLBAR_WORDS))).replace(
-        "LIMIT", str(TOOLBAR_TEXT_LIMIT)
-    )
+def hide_toolbars(driver: WebDriver, words: Sequence[str]) -> int:
     try:
-        return int(driver.execute_script(script) or 0)
+        return int(driver.execute_script(HIDE_TOOLBARS, list(words), TOOLBAR_TEXT_LIMIT) or 0)
     except Exception:
         logger.debug("버튼 줄을 숨기지 못했습니다")
         return 0
@@ -380,12 +388,13 @@ def hide_toolbars(driver: WebDriver) -> int:
 
 def open_body_frame(driver: WebDriver) -> int:
     try:
-        tall = int(driver.execute_script(OPEN_BODY_FRAME.replace("FALLBACK", str(BODY_FALLBACK))))
+        tall = int(driver.execute_script(OPEN_BODY_FRAME, BODY_FALLBACK) or 0)
     except Exception:
         logger.debug("본문 영역을 펴지 못했습니다")
         return 0
 
-    time.sleep(BODY_SETTLE)
+    if tall:
+        time.sleep(BODY_SETTLE)
     return tall
 
 

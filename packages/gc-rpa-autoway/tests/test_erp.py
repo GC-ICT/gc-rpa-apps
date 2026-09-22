@@ -246,15 +246,6 @@ def test_a_missing_document_number_is_an_error(tmp_path: Path, opened: Any) -> N
         erp.register(folder_with(tmp_path, "a.pdf"), sender="보낸이", subject="제목", target=TARGET)
 
 
-def test_a_dict_row_is_read_the_same_way(tmp_path: Path, opened: Any) -> None:
-    opened({"result": "OK", "message": "HR-9"})
-
-    assert (
-        erp.register(folder_with(tmp_path, "a.pdf"), sender="보낸이", subject="제목", target=TARGET)
-        == "HR-9"
-    )
-
-
 def test_the_header_call_passes_the_fixed_codes(tmp_path: Path, opened: Any) -> None:
     cursor = opened(("OK", "HR-9"))
     erp.register(

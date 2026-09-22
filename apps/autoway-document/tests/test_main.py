@@ -55,7 +55,6 @@ def quiet_browser(monkeypatch: pytest.MonkeyPatch) -> None:
         yield object()
 
     monkeypatch.setattr(entry, "chrome", fake_chrome)
-    monkeypatch.setattr(entry, "close_other_windows", lambda *_a, **_k: 0)
     monkeypatch.setattr(site, "login", lambda *_a: None)
     monkeypatch.setattr(config, "usable_database", lambda _settings: erp_database())
     monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: None)
@@ -90,7 +89,6 @@ def test_main_reports_a_failure(
 
 def captured(tmp_path: Any) -> document.Captured:
     return document.Captured(
-        approvals="approvals",
         document=document.Document("2026-000123", "현대글로비스", "9월 정산"),
         folder=tmp_path / "2026-000123",
         attachments=2,
@@ -116,7 +114,7 @@ def test_one_document_is_approved_and_registered(
     assert "첨부 2건" in sent["finished"]["message"]
 
 
-def test_a_document_is_not_approved_without_an_erp_target(
+def test_a_missing_erp_setting_fails_the_run(
     monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig, tmp_path: Any
 ) -> None:
     sent: dict[str, Any] = {}
@@ -131,9 +129,9 @@ def test_a_document_is_not_approved_without_an_erp_target(
     monkeypatch.setattr(document, "approve", lambda _driver: steps.append("결재"))
     monkeypatch.setattr(app.hub, "session", _hub(sent))
 
-    assert entry.main() == 0
+    assert entry.main() == 1
     assert steps == []
-    assert "내려받음" in sent["finished"]["message"]
+    assert "쓸 수 있는 DB 가 없습니다" in sent["failed"]["message"]
 
 
 def test_an_empty_approval_box_is_reported(
