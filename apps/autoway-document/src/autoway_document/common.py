@@ -25,4 +25,4 @@ def headless() -> bool:
 
 
 def approving() -> bool:
-    return config.flag(optional_env(APPROVE_ENV, "N"))
+    return config.flag(optional_env(APPROVE_ENV, "Y"))

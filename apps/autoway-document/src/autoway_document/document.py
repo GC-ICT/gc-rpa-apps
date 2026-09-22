@@ -17,6 +17,7 @@ from gc_rpa_core.browser import (
     call_cdp,
     find_in_frames,
     here_or_none,
+    open_body_frame,
     settled_files,
     wait_download,
     wait_ready,
@@ -192,6 +193,7 @@ def save_attachments(driver: WebDriver, folder: Path, downloads: Path) -> int:
 
 def save_pdf(driver: WebDriver, folder: Path, number: str) -> Path:
     driver.switch_to.default_content()
+    open_body_frame(driver)
     result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_TIMEOUT)
     encoded = result.get("data") or ""
     if not encoded:

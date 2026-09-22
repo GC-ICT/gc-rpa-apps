@@ -35,6 +35,43 @@ SLOW_START_SECONDS = 3.0
 CDP_TIMEOUT = 20.0
 FRAME_POLL = 0.3
 FRAMES = "iframe, frame"
+BODY_FALLBACK = 6000
+BODY_SETTLE = 0.8
+
+OPEN_BODY_FRAME = """
+var frames = document.querySelectorAll('iframe, frame');
+var body = null;
+var widest = 0;
+for (var i = 0; i < frames.length; i++) {
+  var area = frames[i].clientWidth * frames[i].clientHeight;
+  if (area > widest) { widest = area; body = frames[i]; }
+}
+if (!body) { return 0; }
+
+var tall = 0;
+try {
+  var inner = body.contentDocument;
+  if (inner && inner.body) {
+    tall = Math.max(inner.body.scrollHeight, inner.documentElement.scrollHeight);
+    inner.body.style.overflow = 'visible';
+    inner.documentElement.style.overflow = 'visible';
+  }
+} catch (e) {}
+
+body.setAttribute('scrolling', 'no');
+body.style.maxHeight = 'none';
+body.style.height = (tall || FALLBACK) + 'px';
+
+var parent = body.parentElement;
+while (parent && parent !== document.body) {
+  parent.style.maxHeight = 'none';
+  parent.style.height = 'auto';
+  parent.style.overflow = 'visible';
+  parent = parent.parentElement;
+}
+return tall;
+"""
+
 OWN_DRIVERS: set[int] = set()
 TERMINATION_SIGNALS = ("SIGINT", "SIGTERM", "SIGBREAK")
 
@@ -300,6 +337,17 @@ def accept_alert(driver: WebDriver, *, timeout: float = ALERT_TIMEOUT) -> bool:
         return False
     driver.switch_to.alert.accept()
     return True
+
+
+def open_body_frame(driver: WebDriver) -> int:
+    try:
+        tall = int(driver.execute_script(OPEN_BODY_FRAME.replace("FALLBACK", str(BODY_FALLBACK))))
+    except Exception:
+        logger.debug("본문 영역을 펴지 못했습니다")
+        return 0
+
+    time.sleep(BODY_SETTLE)
+    return tall
 
 
 def settled_files(directory: Path) -> set[Path]:
