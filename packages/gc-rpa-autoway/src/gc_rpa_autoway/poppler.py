@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pdf2image import convert_from_path
 
@@ -9,6 +10,7 @@ from gc_rpa_core.env import optional_env
 
 POPPLER_ENV = "POPPLER_PATH"
 POPPLER_BINARY = "pdftoppm"
+BLANK_FLOOR = 250
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,14 @@ def complaint() -> str:
     return f"{POPPLER_ENV} 폴더에 {POPPLER_BINARY} 가 없습니다: {folder}"
 
 
+def blank(page: Any) -> bool:
+    try:
+        darkest, _ = page.convert("L").getextrema()
+    except Exception:
+        return False
+    return bool(darkest >= BLANK_FLOOR)
+
+
 def to_images(pdf: Path) -> list[Path]:
     folder = poppler_path()
     try:
@@ -45,8 +55,14 @@ def to_images(pdf: Path) -> list[Path]:
         return []
 
     written = []
-    for number, page in enumerate(pages, start=1):
-        image = pdf.with_name(f"{pdf.stem}_{number}.jpg")
+    for page in pages:
+        if blank(page):
+            continue
+        image = pdf.with_name(f"{pdf.stem}_{len(written) + 1}.jpg")
         page.save(image, "JPEG")
         written.append(image)
+
+    skipped = len(pages) - len(written)
+    if skipped:
+        logger.info("      빈 페이지 %d장은 건너뛰었습니다", skipped)
     return written
