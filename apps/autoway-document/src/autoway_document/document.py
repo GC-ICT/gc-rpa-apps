@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import logging
 import shutil
+import time
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +15,6 @@ from selenium.webdriver.remote.webelement import WebElement
 from gc_rpa_autoway import poppler
 from gc_rpa_core.browser import (
     call_cdp,
-    close_other_windows,
     find_in_frames,
     here_or_none,
     settled_files,
@@ -36,6 +36,9 @@ WRITER_FIELD = "_AP_TYPE_W_NM#1_"
 TITLE_FIELD = "docTitle"
 
 SAVE_ALL_BUTTON = '//button[.//span[normalize-space(text())="모두저장"]]'
+APPROVE_BUTTON = '//button[.//span[normalize-space(text())="결재"]]'
+AUTHORIZE_RADIO = 'input.ant-radio-input[type="radio"][value="AUTHORIZE"]'
+CONFIRM_BUTTON = '//button[.//span[normalize-space(text())="확인"]]'
 DISABLED_MARKS = ("true", "1", "yes")
 ARCHIVE_SUFFIX = ".zip"
 
@@ -46,6 +49,10 @@ DEFAULT_SENDER = "HMC"
 MENU_TIMEOUT = 20.0
 FIELD_TIMEOUT = 8.0
 BUTTON_TIMEOUT = 5.0
+APPROVE_TIMEOUT = 8.0
+DIALOG_SETTLE = 2.5
+CHOICE_SETTLE = 1.0
+APPROVE_SETTLE = 2.0
 
 PDF_PARAMS = {
     "landscape": True,
@@ -77,6 +84,7 @@ class Document:
 
 @dataclass(frozen=True)
 class Captured:
+    approvals: str
     document: Document
     folder: Path
     attachments: int
@@ -93,8 +101,10 @@ def open_approval(driver: WebDriver) -> None:
     wait_ready(driver)
 
 
-def click_in_frames(driver: WebDriver, locator: str, what: str, *, timeout: float) -> WebElement:
-    found = find_in_frames(driver, By.XPATH, locator, timeout=timeout)
+def click_in_frames(
+    driver: WebDriver, locator: str, what: str, *, by: str = By.XPATH, timeout: float
+) -> WebElement:
+    found = find_in_frames(driver, by, locator, timeout=timeout)
     if found is None:
         raise DocumentError(f"{what} 를 찾지 못했습니다")
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", found)
@@ -194,6 +204,24 @@ def save_pdf(driver: WebDriver, folder: Path, number: str) -> Path:
     return path
 
 
+def approve(driver: WebDriver) -> None:
+    click_in_frames(driver, APPROVE_BUTTON, "결재 버튼", timeout=APPROVE_TIMEOUT)
+    time.sleep(DIALOG_SETTLE)
+
+    click_in_frames(
+        driver,
+        AUTHORIZE_RADIO,
+        "결재 구분(AUTHORIZE)",
+        by=By.CSS_SELECTOR,
+        timeout=APPROVE_TIMEOUT,
+    )
+    time.sleep(CHOICE_SETTLE)
+
+    click_in_frames(driver, CONFIRM_BUTTON, "결재 확인 버튼", timeout=APPROVE_TIMEOUT)
+    time.sleep(APPROVE_SETTLE)
+    logger.info("      결재했습니다")
+
+
 def capture_one(driver: WebDriver, *, workspace: Path, downloads: Path) -> Captured | None:
     open_approval(driver)
     row = first_row(driver)
@@ -213,8 +241,8 @@ def capture_one(driver: WebDriver, *, workspace: Path, downloads: Path) -> Captu
     images = poppler.to_images(pdf)
     logger.info("      %s (이미지 %d장)", pdf.name, len(images))
 
-    close_other_windows(driver, main)
     return Captured(
+        approvals=main,
         document=document,
         folder=folder,
         attachments=attachments,

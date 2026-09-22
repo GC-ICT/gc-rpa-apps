@@ -6,7 +6,7 @@ import pytest
 
 from autoway_document import __main__ as entry
 from autoway_document import common, document
-from gc_rpa_autoway import site
+from gc_rpa_autoway import erp, site
 from gc_rpa_core import app, config
 from gc_rpa_core.config import RpaConfig, RpaDatabase
 from gc_rpa_core.db import DbEndpoint
@@ -55,7 +55,9 @@ def quiet_browser(monkeypatch: pytest.MonkeyPatch) -> None:
         yield object()
 
     monkeypatch.setattr(entry, "chrome", fake_chrome)
+    monkeypatch.setattr(entry, "close_other_windows", lambda *_a, **_k: 0)
     monkeypatch.setattr(site, "login", lambda *_a: None)
+    monkeypatch.setattr(config, "usable_database", lambda _settings: erp_database())
     monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: None)
 
 
@@ -68,22 +70,6 @@ def test_main_logs_in_and_reports(
 
     assert entry.main() == 0
     assert "finished" in sent
-    assert "failed" not in sent
-
-
-def test_the_run_does_not_need_an_erp_database(
-    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig
-) -> None:
-    sent: dict[str, Any] = {}
-
-    def missing(_settings: RpaConfig) -> RpaDatabase:
-        raise LookupError("쓸 수 있는 DB 가 없습니다")
-
-    monkeypatch.setattr(config, "usable_database", missing)
-    monkeypatch.setattr(common, "load", lambda: rpa_settings)
-    monkeypatch.setattr(app.hub, "session", _hub(sent))
-
-    assert entry.main() == 0
     assert "failed" not in sent
 
 
@@ -102,24 +88,52 @@ def test_main_reports_a_failure(
     assert "설정이 없습니다" in sent["failed"]["message"]
 
 
-def test_a_captured_document_is_reported_without_approving(
-    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig, tmp_path: Any
-) -> None:
-    sent: dict[str, Any] = {}
-    taken = document.Captured(
+def captured(tmp_path: Any) -> document.Captured:
+    return document.Captured(
+        approvals="approvals",
         document=document.Document("2026-000123", "현대글로비스", "9월 정산"),
         folder=tmp_path / "2026-000123",
         attachments=2,
         pdf=tmp_path / "2026-000123" / "2026-000123.pdf",
         images=[],
     )
+
+
+def test_one_document_is_approved_and_registered(
+    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig, tmp_path: Any
+) -> None:
+    sent: dict[str, Any] = {}
+    steps: list[str] = []
     monkeypatch.setattr(common, "load", lambda: rpa_settings)
-    monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: taken)
+    monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: captured(tmp_path))
+    monkeypatch.setattr(document, "approve", lambda _driver: steps.append("결재"))
+    monkeypatch.setattr(erp, "register", lambda *_a, **_k: steps.append("등록") or "2609220007")
     monkeypatch.setattr(app.hub, "session", _hub(sent))
 
     assert entry.main() == 0
-    assert "2026-000123" in sent["finished"]["message"]
+    assert steps == ["결재", "등록"]
+    assert "2609220007" in sent["finished"]["message"]
     assert "첨부 2건" in sent["finished"]["message"]
+
+
+def test_a_document_is_not_approved_without_an_erp_target(
+    monkeypatch: pytest.MonkeyPatch, quiet_browser: None, rpa_settings: RpaConfig, tmp_path: Any
+) -> None:
+    sent: dict[str, Any] = {}
+    steps: list[str] = []
+
+    def missing(_settings: RpaConfig) -> RpaDatabase:
+        raise LookupError("쓸 수 있는 DB 가 없습니다")
+
+    monkeypatch.setattr(config, "usable_database", missing)
+    monkeypatch.setattr(common, "load", lambda: rpa_settings)
+    monkeypatch.setattr(document, "capture_one", lambda *_a, **_k: captured(tmp_path))
+    monkeypatch.setattr(document, "approve", lambda _driver: steps.append("결재"))
+    monkeypatch.setattr(app.hub, "session", _hub(sent))
+
+    assert entry.main() == 0
+    assert steps == []
+    assert "내려받음" in sent["finished"]["message"]
 
 
 def test_an_empty_approval_box_is_reported(
