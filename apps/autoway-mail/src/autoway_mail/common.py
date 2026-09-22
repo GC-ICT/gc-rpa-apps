@@ -33,4 +33,4 @@ def headless() -> bool:
 
 
 def keeping() -> bool:
-    return config.flag(optional_env(KEEP_ENV, "Y"))
+    return config.flag(optional_env(KEEP_ENV, "N"))
