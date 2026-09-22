@@ -29,7 +29,7 @@ def executable_name():
         from gc_rpa_core import config
         from gc_rpa_core.env import optional_env
 
-        settings = config.load(optional_env("AUTOWAY_DOCUMENT_SCHEDULE_ID", "11"))
+        settings = config.load(optional_env("AUTOWAY_DOCUMENT_SCHEDULE_ID", "7"))
         name = Path(settings.exe_name).stem
         if not name:
             raise ValueError("file_nm 이 비어 있다")
