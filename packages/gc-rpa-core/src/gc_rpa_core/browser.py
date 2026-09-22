@@ -25,18 +25,18 @@ from selenium.webdriver.support.wait import WebDriverWait
 WINDOW_SIZE = (1920, 1080)
 PAGE_TIMEOUT = 300
 ELEMENT_TIMEOUT = 60
-ALERT_TIMEOUT = 5
-DOWNLOAD_TIMEOUT = 300
+ALERT_TIMEOUT = 8
+DOWNLOAD_TIMEOUT = 600
 DOWNLOAD_POLL = 0.5
 PARTIAL_SUFFIXES = (".crdownload", ".tmp", ".part")
 STAMP_FORMAT = "%H%M%S"
 SLOW_START_SECONDS = 3.0
 
-CDP_TIMEOUT = 20.0
+CDP_TIMEOUT = 40.0
 FRAME_POLL = 0.3
 FRAMES = "iframe, frame"
 BODY_FALLBACK = 6000
-BODY_SETTLE = 0.8
+BODY_SETTLE = 1.5
 
 OPEN_BODY_FRAME = """
 var frames = document.querySelectorAll('iframe, frame');
