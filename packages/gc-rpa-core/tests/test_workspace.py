@@ -42,3 +42,15 @@ def test_downloads_sit_under_the_workspace(tmp_path: Path) -> None:
 def test_an_empty_move_path_is_refused(move_path: str) -> None:
     with pytest.raises(workspace.WorkspaceError, match="file_move_path"):
         workspace.workspace(replace(settings("x"), move_path=move_path))
+
+
+def test_a_path_that_cannot_be_made_names_the_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(_path: str) -> Path:
+        raise FileNotFoundError(3, "지정된 경로를 찾을 수 없습니다")
+
+    monkeypatch.setattr(workspace, "resolve_dir", refuse)
+
+    with pytest.raises(workspace.WorkspaceError, match=r"file_move_path .* D:") as caught:
+        workspace.workspace(settings("D:\\rpa\\autoway"))
+
+    assert "지정된 경로를 찾을 수 없습니다" in str(caught.value)
