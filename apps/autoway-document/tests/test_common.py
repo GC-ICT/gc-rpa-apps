@@ -3,10 +3,10 @@ import pytest
 from autoway_document import common
 
 
-def test_schedule_id_defaults_to_eleven(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_schedule_id_defaults_to_the_live_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(common.SCHEDULE_ID_ENV, raising=False)
 
-    assert common.schedule_id() == "11"
+    assert common.schedule_id() == "7"
 
 
 def test_schedule_id_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
