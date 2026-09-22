@@ -7,7 +7,6 @@ SCHEDULE_ID_ENV = "AUTOWAY_DOCUMENT_SCHEDULE_ID"
 DEFAULT_SCHEDULE_ID = "7"
 
 HEADLESS_ENV = "AUTOWAY_DOCUMENT_HEADLESS"
-APPROVE_ENV = "AUTOWAY_DOCUMENT_APPROVE"
 
 ERP_KEY_COLUMN = "docu_no"
 
@@ -22,7 +21,3 @@ def load() -> config.RpaConfig:
 
 def headless() -> bool:
     return config.flag(optional_env(HEADLESS_ENV, "1"))
-
-
-def approving() -> bool:
-    return config.flag(optional_env(APPROVE_ENV, "Y"))

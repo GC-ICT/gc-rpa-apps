@@ -22,10 +22,6 @@ def warn_about_poppler() -> None:
 
 
 def erp_target(settings: config.RpaConfig) -> erp.Target | None:
-    if not common.approving():
-        logger.info("      결재를 끄고 내려받기만 합니다 (%s=Y 로 켭니다)", common.APPROVE_ENV)
-        return None
-
     try:
         target = erp.target(config.usable_database(settings), key_column=common.ERP_KEY_COLUMN)
     except (LookupError, erp.ErpError) as exc:
