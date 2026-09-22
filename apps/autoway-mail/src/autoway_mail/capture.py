@@ -42,6 +42,9 @@ EXPORT_RETRY_PAUSE = 1.0
 DOWNLOAD_START_GRACE = 5.0
 DOWNLOAD_TIMEOUT = 180.0
 
+BODY_FALLBACK = 6000
+EXPAND_SETTLE = 0.8
+
 PDF_NAME = "document.pdf"
 PDF_SETUP_TIMEOUT = 5.0
 PDF_PRINT_TIMEOUT = 20.0
@@ -78,6 +81,40 @@ for (var i = 0; i < frames.length; i++) {
   }
 }
 return best;
+"""
+
+OPEN_BODY_FRAME = """
+var frames = document.querySelectorAll('iframe, frame');
+var body = null;
+var widest = 0;
+for (var i = 0; i < frames.length; i++) {
+  var area = frames[i].clientWidth * frames[i].clientHeight;
+  if (area > widest) { widest = area; body = frames[i]; }
+}
+if (!body) { return 0; }
+
+var tall = 0;
+try {
+  var inner = body.contentDocument;
+  if (inner && inner.body) {
+    tall = Math.max(inner.body.scrollHeight, inner.documentElement.scrollHeight);
+    inner.body.style.overflow = 'visible';
+    inner.documentElement.style.overflow = 'visible';
+  }
+} catch (e) {}
+
+body.setAttribute('scrolling', 'no');
+body.style.maxHeight = 'none';
+body.style.height = (tall || FALLBACK) + 'px';
+
+var parent = body.parentElement;
+while (parent && parent !== document.body) {
+  parent.style.maxHeight = 'none';
+  parent.style.height = 'auto';
+  parent.style.overflow = 'visible';
+  parent = parent.parentElement;
+}
+return tall;
 """
 
 MEASURE_PAGE = """
@@ -278,6 +315,17 @@ def print_media(driver: WebDriver) -> None:
         logger.debug("      인쇄 CSS 적용을 건너뜁니다")
 
 
+def open_body_frame(driver: WebDriver) -> int:
+    try:
+        tall = int(driver.execute_script(OPEN_BODY_FRAME.replace("FALLBACK", str(BODY_FALLBACK))))
+    except Exception:
+        logger.debug("      본문 영역을 펴지 못했습니다")
+        return 0
+
+    time.sleep(EXPAND_SETTLE)
+    return tall
+
+
 def body_frame_url(driver: WebDriver) -> str:
     try:
         return str(driver.execute_script(BODY_FRAME_SCRIPT) or "")
@@ -290,7 +338,8 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     path = folder / PDF_NAME
 
     print_media(driver)
-    logger.info("      본문 %d x %dpx", *content_size(driver))
+    tall = open_body_frame(driver)
+    logger.info("      본문 %d x %dpx (본문틀 %dpx)", *content_size(driver), tall)
     result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_PRINT_TIMEOUT)
 
     encoded = result.get("data") or ""
