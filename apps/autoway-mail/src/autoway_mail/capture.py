@@ -59,6 +59,15 @@ PDF_PARAMS = {
     "scale": 0.95,
 }
 
+MEASURE_PAGE = """
+var doc = document.documentElement;
+var body = document.body;
+return [
+  Math.max(doc.scrollWidth, body ? body.scrollWidth : 0),
+  Math.max(doc.scrollHeight, body ? body.scrollHeight : 0)
+];
+"""
+
 logger = logging.getLogger(__name__)
 
 
@@ -229,11 +238,21 @@ def focus_popup(driver: WebDriver, before: set[str], *, timeout: float = POPUP_T
     raise CaptureError(f"본문 팝업 창이 {timeout:g}초 안에 열리지 않았습니다")
 
 
+def content_size(driver: WebDriver) -> tuple[int, int]:
+    try:
+        width, height = driver.execute_script(MEASURE_PAGE)
+    except Exception:
+        return 0, 0
+    return int(width or 0), int(height or 0)
+
+
 def write_pdf(driver: WebDriver, folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / PDF_NAME
 
-    expand_page(driver)
+    opened = expand_page(driver)
+    width, height = content_size(driver)
+    logger.info("      본문 %d x %dpx (펼친 영역 %d곳)", width, height, opened)
 
     try:
         call_cdp(

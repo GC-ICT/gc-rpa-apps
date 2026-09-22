@@ -185,3 +185,21 @@ def test_the_body_is_printed_on_a4_sheets_on_their_side() -> None:
     assert capture.PDF_PARAMS["landscape"] is True
     assert (capture.PDF_PARAMS["paperWidth"], capture.PDF_PARAMS["paperHeight"]) == (11.69, 8.27)
     assert capture.PDF_PARAMS["scale"] == 0.95
+
+
+class FakePage:
+    def __init__(self, size: tuple[int, int] | None) -> None:
+        self.size = size
+
+    def execute_script(self, _script: str) -> list[int]:
+        if self.size is None:
+            raise RuntimeError("스크립트를 돌리지 못했습니다")
+        return list(self.size)
+
+
+def test_the_body_size_is_measured() -> None:
+    assert capture.content_size(FakePage((1900, 4200))) == (1900, 4200)  # type: ignore[arg-type]
+
+
+def test_an_unmeasurable_body_reads_as_zero() -> None:
+    assert capture.content_size(FakePage(None)) == (0, 0)  # type: ignore[arg-type]
