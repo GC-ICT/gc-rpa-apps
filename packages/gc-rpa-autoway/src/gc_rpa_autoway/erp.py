@@ -158,7 +158,7 @@ def register(
     if not placed:
         raise ErpError(f"등록할 파일이 없습니다: {folder}")
 
-    with cursor(target.endpoint, autocommit=False) as opened:
+    with cursor(target.endpoint, autocommit=False, as_dict=False) as opened:
         document_no = call_header(
             opened,
             target.header,
