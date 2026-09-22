@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import logging
-import math
 import shutil
 import time
 from pathlib import Path
@@ -48,28 +47,17 @@ PDF_NAME = "document.pdf"
 PDF_SETUP_TIMEOUT = 5.0
 PDF_PRINT_TIMEOUT = 20.0
 PDF_PARAMS = {
+    "landscape": True,
     "printBackground": True,
     "preferCSSPageSize": False,
-    "marginTop": 0.0,
-    "marginBottom": 0.0,
-    "marginLeft": 0.0,
-    "marginRight": 0.0,
-    "scale": 1.0,
+    "paperWidth": 11.69,
+    "paperHeight": 8.27,
+    "marginTop": 0.2,
+    "marginBottom": 0.2,
+    "marginLeft": 0.2,
+    "marginRight": 0.2,
+    "scale": 0.95,
 }
-A4_WIDTH = 8.27
-A4_HEIGHT = 11.69
-A4_RATIO = A4_HEIGHT / A4_WIDTH
-PIXELS_PER_INCH = 96.0
-PAGE_PADDING = 0.2
-
-MEASURE_PAGE = """
-var doc = document.documentElement;
-var body = document.body;
-return [
-  Math.max(doc.scrollWidth, doc.offsetWidth, body ? body.scrollWidth : 0),
-  Math.max(doc.scrollHeight, doc.offsetHeight, body ? body.scrollHeight : 0)
-];
-"""
 
 logger = logging.getLogger(__name__)
 
@@ -241,39 +229,6 @@ def focus_popup(driver: WebDriver, before: set[str], *, timeout: float = POPUP_T
     raise CaptureError(f"본문 팝업 창이 {timeout:g}초 안에 열리지 않았습니다")
 
 
-def measured_pixels(driver: WebDriver) -> tuple[float, float]:
-    try:
-        width, height = driver.execute_script(MEASURE_PAGE)
-    except Exception:
-        return 0.0, 0.0
-    return float(width or 0), float(height or 0)
-
-
-def reported_pixels(driver: WebDriver) -> tuple[float, float]:
-    metrics = call_cdp(driver, "Page.getLayoutMetrics", {}, timeout=PDF_SETUP_TIMEOUT)
-    content = metrics.get("cssContentSize") or metrics.get("contentSize") or {}
-    return float(content.get("width") or 0), float(content.get("height") or 0)
-
-
-def content_inches(driver: WebDriver) -> tuple[float, float]:
-    reported = reported_pixels(driver)
-    measured = measured_pixels(driver)
-    width = max(reported[0], measured[0]) / PIXELS_PER_INCH
-    height = max(reported[1], measured[1]) / PIXELS_PER_INCH
-    if not width or not height:
-        return A4_WIDTH, A4_HEIGHT
-    return width + PAGE_PADDING, height + PAGE_PADDING
-
-
-def whole_page(driver: WebDriver) -> dict[str, object]:
-    width, height = content_inches(driver)
-    sheet = width * A4_RATIO
-    if height > sheet:
-        logger.info("      본문을 %d장으로 나눠 담습니다", math.ceil(height / sheet))
-        height = sheet
-    return {**PDF_PARAMS, "paperWidth": width, "paperHeight": height, "landscape": False}
-
-
 def write_pdf(driver: WebDriver, folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / PDF_NAME
@@ -289,7 +244,7 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     except Exception:
         logger.debug("      화면 CSS 적용을 건너뜁니다")
 
-    result = call_cdp(driver, "Page.printToPDF", whole_page(driver), timeout=PDF_PRINT_TIMEOUT)
+    result = call_cdp(driver, "Page.printToPDF", PDF_PARAMS, timeout=PDF_PRINT_TIMEOUT)
     encoded = result.get("data") or ""
     if not encoded:
         raise CaptureError("Page.printToPDF 가 빈 결과를 돌려주었습니다")
