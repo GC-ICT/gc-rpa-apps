@@ -127,6 +127,41 @@ def test_no_save_button_means_no_attachments(
     assert "첨부 없음" in caplog.text
 
 
+class SlowTableDriver(FakeDriver):
+    def __init__(self, appears_on: int) -> None:
+        super().__init__()
+        self.appears_on = appears_on
+        self.looks = 0
+
+    def find_elements(self, by: str, locator: str) -> list[FakeElement]:
+        if locator != document.DOCUMENT_ROW:
+            return super().find_elements(by, locator)
+        self.looks += 1
+        filled = self.appears_on > 0 and self.looks >= self.appears_on
+        return [FakeElement()] if filled else []
+
+
+@pytest.fixture
+def instant_polling(monkeypatch: pytest.MonkeyPatch) -> None:
+    from gc_rpa_core import browser
+
+    monkeypatch.setattr(browser.time, "sleep", lambda _s: None)
+
+
+def test_the_row_lookup_waits_for_the_table(instant_polling: None) -> None:
+    driver = SlowTableDriver(appears_on=3)
+
+    assert document.first_row(driver, timeout=5.0) is not None
+    assert driver.looks >= 3
+
+
+def test_a_table_that_never_fills_gives_up(instant_polling: None) -> None:
+    driver = SlowTableDriver(appears_on=0)
+
+    assert document.first_row(driver, timeout=0.05) is None
+    assert driver.looks >= 1
+
+
 def test_an_empty_list_captures_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(document, "open_approval", lambda _d: None)
     monkeypatch.setattr(document, "first_row", lambda _d: None)
@@ -145,8 +180,31 @@ def test_a_new_window_takes_the_focus() -> None:
 def test_no_new_window_leaves_the_focus_alone() -> None:
     driver = FakeDriver()
 
-    assert document.focus_new_window(driver, {"main"}) is False
+    assert document.focus_new_window(driver, {"main"}, timeout=0.01) is False
     assert driver.switch_to.handle == "main"
+
+
+class LateWindowDriver(FakeDriver):
+    def __init__(self, opens_on: int) -> None:
+        super().__init__()
+        self.opens_on = opens_on
+        self.looks = 0
+
+    @property
+    def window_handles(self) -> list[str]:
+        self.looks += 1
+        return ["main", "popup"] if self.looks >= self.opens_on else ["main"]
+
+    @window_handles.setter
+    def window_handles(self, _value: list[str]) -> None:
+        return None
+
+
+def test_a_late_window_is_still_caught(instant_polling: None) -> None:
+    driver = LateWindowDriver(opens_on=4)
+
+    assert document.focus_new_window(driver, {"main"}, timeout=5.0) is True
+    assert driver.switch_to.handle == "popup"
 
 
 def test_a_missing_link_says_what_it_looked_for(straight_to_page: None) -> None:

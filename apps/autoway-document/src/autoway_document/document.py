@@ -17,7 +17,6 @@ from gc_rpa_core.browser import (
     A4_LANDSCAPE,
     call_cdp,
     find_in_frames,
-    here_or_none,
     hide_toolbars,
     open_body_frame,
     settled_files,
@@ -51,6 +50,9 @@ GLOBIS_NAME = "현대글로비스"
 DEFAULT_SENDER = "HMC"
 
 MENU_TIMEOUT = 40.0
+ROW_TIMEOUT = 30.0
+WINDOW_TIMEOUT = 20.0
+WINDOW_POLL = 0.3
 FIELD_TIMEOUT = 15.0
 BUTTON_TIMEOUT = 10.0
 APPROVE_TIMEOUT = 15.0
@@ -106,16 +108,22 @@ def click_in_frames(
     return found
 
 
-def focus_new_window(driver: WebDriver, known: set[str]) -> bool:
-    opened = [handle for handle in driver.window_handles if handle not in known]
-    if not opened:
-        return False
-    driver.switch_to.window(opened[-1])
-    return True
+def focus_new_window(
+    driver: WebDriver, known: set[str], *, timeout: float = WINDOW_TIMEOUT
+) -> bool:
+    deadline = time.monotonic() + timeout
+    while True:
+        opened = [handle for handle in driver.window_handles if handle not in known]
+        if opened:
+            driver.switch_to.window(opened[-1])
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(WINDOW_POLL)
 
 
-def first_row(driver: WebDriver) -> WebElement | None:
-    return here_or_none(driver, By.XPATH, DOCUMENT_ROW)
+def first_row(driver: WebDriver, *, timeout: float = ROW_TIMEOUT) -> WebElement | None:
+    return find_in_frames(driver, By.XPATH, DOCUMENT_ROW, timeout=timeout)
 
 
 def open_detail(driver: WebDriver, row: WebElement) -> None:
@@ -219,7 +227,7 @@ def capture_one(driver: WebDriver, *, workspace: Path, downloads: Path) -> Captu
     open_approval(driver)
     row = first_row(driver)
     if row is None:
-        logger.info("      결재할 문서가 없습니다")
+        logger.info("      %g초를 기다려도 결재 대기 목록이 비어 있습니다", ROW_TIMEOUT)
         return None
 
     open_detail(driver, row)
