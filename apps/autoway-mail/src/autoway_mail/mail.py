@@ -11,6 +11,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 
 from autoway_mail import capture, history, inbox
 from gc_rpa_autoway import erp, poppler
+from gc_rpa_autoway.naming import pdf_name, safe_name
 from gc_rpa_core import config
 from gc_rpa_core.browser import RendererHangError, close_other_windows, session_dead
 
@@ -101,7 +102,7 @@ def unique_dir(parent: Path, name: str) -> Path:
 
 def make_folder(session: Session, listing: inbox.Listing) -> Path:
     stamp = inbox.clean_digits(listing.received_at)
-    folder = unique_dir(session.workspace, f"{stamp}_{inbox.safe_name(listing.sender)}")
+    folder = unique_dir(session.workspace, f"{stamp}_{safe_name(listing.sender)}")
     folder.mkdir(parents=True, exist_ok=True)
     return folder
 
@@ -167,7 +168,9 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
         capture.save_eml(session.driver, folder, session.downloads)
 
         step = Step.PDF
-        pdf = capture.save_body_pdf(session.driver, folder)
+        pdf = capture.save_body_pdf(
+            session.driver, folder, name=pdf_name(inbox.clean_text(listing.subject))
+        )
         poppler.to_images(pdf)
 
         step = Step.REGISTER

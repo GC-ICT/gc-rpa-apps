@@ -128,10 +128,6 @@ def clean_digits(value: str) -> str:
     return re.sub(r"[^0-9]", "", value or "")
 
 
-def safe_name(value: str) -> str:
-    return re.sub(r'[\\/:*?"<>|]', "_", value).strip()[:60]
-
-
 def enter_mail_frame(driver: WebDriver) -> None:
     driver.switch_to.default_content()
     for name in MAIL_FRAMES:

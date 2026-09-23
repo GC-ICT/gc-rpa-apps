@@ -13,6 +13,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
 
 from gc_rpa_autoway import poppler
+from gc_rpa_autoway.naming import pdf_name
 from gc_rpa_core.browser import (
     A4_LANDSCAPE,
     call_cdp,
@@ -189,7 +190,7 @@ def save_attachments(driver: WebDriver, folder: Path, downloads: Path) -> int:
     return saved
 
 
-def save_pdf(driver: WebDriver, folder: Path, number: str) -> Path:
+def save_pdf(driver: WebDriver, folder: Path, name: str) -> Path:
     driver.switch_to.default_content()
     open_body_frame(driver)
     logger.info("      버튼 줄 %d곳을 숨겼습니다", hide_toolbars(driver, TOOLBAR_WORDS))
@@ -198,7 +199,7 @@ def save_pdf(driver: WebDriver, folder: Path, number: str) -> Path:
     if not encoded:
         raise DocumentError("Page.printToPDF 가 빈 결과를 돌려주었습니다")
 
-    path = folder / f"{number}.pdf"
+    path = folder / name
     path.write_bytes(base64.b64decode(str(encoded)))
     if path.stat().st_size <= 0:
         raise DocumentError(f"저장된 PDF 크기가 0입니다: {path}")
@@ -237,7 +238,7 @@ def capture_one(driver: WebDriver, *, workspace: Path, downloads: Path) -> Captu
     folder = workspace / document.number
     folder.mkdir(parents=True, exist_ok=True)
     attachments = save_attachments(driver, folder, downloads)
-    pdf = save_pdf(driver, folder, document.number)
+    pdf = save_pdf(driver, folder, pdf_name(document.title))
     images = poppler.to_images(pdf)
 
     return Captured(

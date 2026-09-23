@@ -56,14 +56,6 @@ def test_clean_digits_keeps_only_numbers() -> None:
     assert inbox.clean_digits("2026-07-24 13:25") == "202607241325"
 
 
-def test_safe_name_replaces_path_characters() -> None:
-    assert inbox.safe_name("보낸이/이름:주소") == "보낸이_이름_주소"
-
-
-def test_safe_name_is_capped() -> None:
-    assert len(inbox.safe_name("가" * 200)) == 60
-
-
 def test_label_reads_as_sender_then_subject() -> None:
     assert listing(sender_name="보낸이", subject="제목").label == "[보낸이] 제목"
 

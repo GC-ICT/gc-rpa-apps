@@ -223,9 +223,9 @@ def test_the_pdf_is_written_from_the_printed_bytes(
         lambda *_a, **_k: {"data": base64.b64encode(b"%PDF-1.4 ...").decode()},
     )
 
-    path = document.save_pdf(FakeDriver(), tmp_path, "2026-000123")
+    path = document.save_pdf(FakeDriver(), tmp_path, "9월 정산 통보.pdf")
 
-    assert path.name == "2026-000123.pdf"
+    assert path.name == "9월 정산 통보.pdf"
     assert path.read_bytes().startswith(b"%PDF")
 
 

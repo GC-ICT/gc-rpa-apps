@@ -95,8 +95,8 @@ def feed(monkeypatch: pytest.MonkeyPatch, listings: list[Listing]) -> FakeInbox:
 
 
 def writes_pdf(session: Session) -> Any:
-    def save(_driver: Any, folder: Path) -> Path:
-        path = folder / "document.pdf"
+    def save(_driver: Any, folder: Path, *, name: str = "document.pdf") -> Path:
+        path = folder / name
         path.write_bytes(b"%PDF-")
         return path
 
@@ -227,11 +227,11 @@ def test_an_ordinary_failure_moves_on_to_the_next_mail(
     feed(monkeypatch, [listing(), listing("m2")])
     calls: list[str] = []
 
-    def sometimes(_driver: Any, folder: Path) -> Path:
+    def sometimes(_driver: Any, folder: Path, *, name: str = "document.pdf") -> Path:
         calls.append(folder.name)
         if len(calls) == 1:
             raise RuntimeError("본문을 읽지 못했습니다")
-        path = folder / "document.pdf"
+        path = folder / name
         path.write_bytes(b"%PDF-")
         return path
 

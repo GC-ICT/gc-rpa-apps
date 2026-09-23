@@ -47,24 +47,9 @@ EXPORT_RETRY_PAUSE = 2.0
 DOWNLOAD_START_GRACE = 30.0
 DOWNLOAD_TIMEOUT = 600.0
 
-PDF_NAME = "document.pdf"
+DEFAULT_PDF_NAME = "document.pdf"
 PDF_SETUP_TIMEOUT = 10.0
 PDF_PRINT_TIMEOUT = 60.0
-PDF_NAME = "document.pdf"
-PDF_SETUP_TIMEOUT = 10.0
-PDF_PRINT_TIMEOUT = 60.0
-PDF_PARAMS = {
-    "landscape": True,
-    "printBackground": True,
-    "preferCSSPageSize": False,
-    "paperWidth": 11.69,
-    "paperHeight": 8.27,
-    "marginTop": 0.2,
-    "marginBottom": 0.2,
-    "marginLeft": 0.2,
-    "marginRight": 0.2,
-    "scale": 0.95,
-}
 
 BODY_FRAME_SCRIPT = """
 var frames = document.querySelectorAll('iframe, frame');
@@ -290,9 +275,9 @@ def body_frame_url(driver: WebDriver) -> str:
         return ""
 
 
-def write_pdf(driver: WebDriver, folder: Path) -> Path:
+def write_pdf(driver: WebDriver, folder: Path, name: str) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / PDF_NAME
+    path = folder / name
 
     print_media(driver)
     result = call_cdp(driver, "Page.printToPDF", A4_LANDSCAPE, timeout=PDF_PRINT_TIMEOUT)
@@ -307,12 +292,12 @@ def write_pdf(driver: WebDriver, folder: Path) -> Path:
     return path
 
 
-def write_body_pdf(driver: WebDriver, folder: Path) -> Path:
+def write_body_pdf(driver: WebDriver, folder: Path, name: str) -> Path:
     url = body_frame_url(driver)
     if not url:
         logger.info("      본문 주소를 찾지 못해 팝업 화면을 그대로 담습니다")
         open_body_frame(driver)
-        return write_pdf(driver, folder)
+        return write_pdf(driver, folder, name)
 
     popup = driver.current_window_handle
     driver.switch_to.new_window("tab")
@@ -321,13 +306,13 @@ def write_body_pdf(driver: WebDriver, folder: Path) -> Path:
         wait_ready(driver)
         wait_for_body(driver)
         time.sleep(POPUP_SETTLE)
-        return write_pdf(driver, folder)
+        return write_pdf(driver, folder, name)
     finally:
         driver.close()
         driver.switch_to.window(popup)
 
 
-def save_body_pdf(driver: WebDriver, folder: Path) -> Path:
+def save_body_pdf(driver: WebDriver, folder: Path, *, name: str = DEFAULT_PDF_NAME) -> Path:
     main = driver.current_window_handle
     time.sleep(0.6)
     inbox.enter_mail_frame(driver)
@@ -345,7 +330,7 @@ def save_body_pdf(driver: WebDriver, folder: Path) -> Path:
     try:
         focus_popup(driver, before)
         inbox.dismiss_layer(driver, settle=1.0)
-        path = write_body_pdf(driver, folder)
+        path = write_body_pdf(driver, folder, name)
     except RendererHangError:
         raise
     except Exception:
