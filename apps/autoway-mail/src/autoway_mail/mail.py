@@ -177,6 +177,7 @@ def process(session: Session, listing: inbox.Listing) -> tuple[Outcome, str]:
             sender=listing.sender,
             subject=inbox.clean_text(listing.subject),
             target=session.erp_target,
+            body=folder / pdf.name,
         )
         if listing.key:
             session.store.mark_registered(listing.key, document_no)

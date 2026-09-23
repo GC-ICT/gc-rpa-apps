@@ -33,6 +33,7 @@ def finish(taken: document.Captured, target: erp.Target) -> app.Done:
         sender=taken.document.sender,
         subject=taken.document.title,
         target=target,
+        body=taken.pdf,
     )
     return app.Done(
         f"{taken.document.number} 결재·ERP 등록 완료 (docu_no={document_no}, "

@@ -16,13 +16,12 @@ from gc_rpa_core.statement import bind
 HEADER_OK = "OK"
 
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
-PDF_SUFFIX = ".pdf"
 ARCHIVE_SUFFIX = ".zip"
 EXCLUDED_NAMES = ("docinfo.xlsx", "docinfo.xls")
 
-FIRST_IMAGE_SLOT = 1
-FIRST_PDF_SLOT = 3
-FIRST_OTHER_SLOT = 11
+FIRST_PREVIEW_SLOT = 1
+PREVIEW_SLOTS = 2
+FIRST_LISTED_SLOT = 11
 NAME_LIMIT = 200
 
 logger = logging.getLogger(__name__)
@@ -85,17 +84,22 @@ def sorted_files(folder: Path) -> list[Path]:
     return sorted((path for path in folder.rglob("*") if wanted(path)), key=lambda p: str(p))
 
 
-def classify(folder: Path) -> tuple[list[Path], list[Path], list[Path]]:
-    images, pdfs, others = [], [], []
+def preview_of(body: Path | None, path: Path) -> bool:
+    if body is None or path.suffix.lower() not in IMAGE_SUFFIXES:
+        return False
+    return path.parent == body.parent and path.stem.startswith(f"{body.stem}_")
+
+
+def classify(folder: Path, body: Path | None) -> tuple[list[Path], list[Path]]:
+    previews, attachments = [], []
     for path in sorted_files(folder):
-        suffix = path.suffix.lower()
-        if suffix in IMAGE_SUFFIXES:
-            images.append(path)
-        elif suffix == PDF_SUFFIX:
-            pdfs.append(path)
+        if path == body:
+            continue
+        if preview_of(body, path):
+            previews.append(path)
         else:
-            others.append(path)
-    return images, pdfs, others
+            attachments.append(path)
+    return previews, attachments
 
 
 def dropped(kind: str, files: list[Path], kept: int) -> None:
@@ -104,17 +108,15 @@ def dropped(kind: str, files: list[Path], kept: int) -> None:
         logger.warning("      %s 슬롯이 %d개뿐이라 올리지 않습니다: %s", kind, kept, names)
 
 
-def slotted(folder: Path) -> list[tuple[int, Path]]:
-    images, pdfs, others = classify(folder)
-    image_slots = FIRST_PDF_SLOT - FIRST_IMAGE_SLOT
-    pdf_slots = FIRST_OTHER_SLOT - FIRST_PDF_SLOT
+def slotted(folder: Path, *, body: Path | None = None) -> list[tuple[int, Path]]:
+    previews, attachments = classify(folder, body)
+    dropped("본문 이미지", previews, PREVIEW_SLOTS)
 
-    dropped("이미지", images, image_slots)
-    dropped("PDF", pdfs, pdf_slots)
-
-    placed = [(FIRST_IMAGE_SLOT + offset, path) for offset, path in enumerate(images[:image_slots])]
-    placed += [(FIRST_PDF_SLOT + offset, path) for offset, path in enumerate(pdfs[:pdf_slots])]
-    placed += [(FIRST_OTHER_SLOT + offset, path) for offset, path in enumerate(others)]
+    listed = attachments if body is None or not body.is_file() else [body, *attachments]
+    placed = [
+        (FIRST_PREVIEW_SLOT + offset, path) for offset, path in enumerate(previews[:PREVIEW_SLOTS])
+    ]
+    placed += [(FIRST_LISTED_SLOT + offset, path) for offset, path in enumerate(listed)]
     return placed
 
 
@@ -151,10 +153,11 @@ def register(
     sender: str,
     subject: str,
     target: Target,
+    body: Path | None = None,
     accepted_on: date | None = None,
 ) -> str:
     unpack_archives(folder)
-    placed = slotted(folder)
+    placed = slotted(folder, body=body)
     if not placed:
         raise ErpError(f"등록할 파일이 없습니다: {folder}")
 

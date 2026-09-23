@@ -73,47 +73,84 @@ def slots(cursor: FakeCursor) -> dict[str, int]:
     return {row[3]: row[1] for row in inserts}
 
 
-def test_images_take_the_first_two_slots(tmp_path: Path, opened: Any) -> None:
+def test_body_previews_take_the_first_two_slots(tmp_path: Path, opened: Any) -> None:
     cursor = opened(("OK", "HR-9"))
     folder = folder_with(tmp_path, "document_1.jpg", "document_2.jpg", "document.pdf", "mail.eml")
 
-    erp.register(folder, sender="보낸이", subject="제목", target=TARGET)
+    erp.register(
+        folder, sender="보낸이", subject="제목", target=TARGET, body=folder / "document.pdf"
+    )
 
     assert slots(cursor) == {
         "document_1.jpg": 1,
         "document_2.jpg": 2,
-        "document.pdf": 3,
-        "mail.eml": 11,
+        "document.pdf": 11,
+        "mail.eml": 12,
     }
 
 
-def test_a_third_image_is_left_out(tmp_path: Path, opened: Any) -> None:
+def test_a_third_preview_is_left_out(tmp_path: Path, opened: Any) -> None:
     cursor = opened(("OK", "HR-9"))
     folder = folder_with(tmp_path, "a_1.jpg", "a_2.jpg", "a_3.jpg", "a.pdf")
 
-    erp.register(folder, sender="보낸이", subject="제목", target=TARGET)
+    erp.register(folder, sender="보낸이", subject="제목", target=TARGET, body=folder / "a.pdf")
 
     assert "a_3.jpg" not in slots(cursor)
 
 
-def test_pdfs_start_at_the_third_slot_even_without_images(tmp_path: Path, opened: Any) -> None:
+def test_the_body_pdf_takes_the_eleventh_slot(tmp_path: Path, opened: Any) -> None:
     cursor = opened(("OK", "HR-9"))
+    folder = folder_with(tmp_path, "a.pdf")
 
-    erp.register(folder_with(tmp_path, "a.pdf"), sender="보낸이", subject="제목", target=TARGET)
+    erp.register(folder, sender="보낸이", subject="제목", target=TARGET, body=folder / "a.pdf")
 
-    assert slots(cursor) == {"a.pdf": 3}
+    assert slots(cursor) == {"a.pdf": 11}
 
 
-def test_the_ninth_pdf_is_left_out(tmp_path: Path, opened: Any) -> None:
+def test_attached_pdfs_go_after_the_tenth_slot(tmp_path: Path, opened: Any) -> None:
     cursor = opened(("OK", "HR-9"))
-    names = [f"p{index}.pdf" for index in range(1, 10)]
+    folder = folder_with(tmp_path, "document.pdf", "첨부1.pdf", "첨부2.pdf")
 
-    erp.register(folder_with(tmp_path, *names), sender="보낸이", subject="제목", target=TARGET)
+    erp.register(
+        folder, sender="보낸이", subject="제목", target=TARGET, body=folder / "document.pdf"
+    )
+
+    assert slots(cursor) == {"document.pdf": 11, "첨부1.pdf": 12, "첨부2.pdf": 13}
+
+
+def test_every_attached_pdf_is_uploaded(tmp_path: Path, opened: Any) -> None:
+    cursor = opened(("OK", "HR-9"))
+    names = [f"p{index}.pdf" for index in range(1, 13)]
+    folder = folder_with(tmp_path, "document.pdf", *names)
+
+    erp.register(
+        folder, sender="보낸이", subject="제목", target=TARGET, body=folder / "document.pdf"
+    )
 
     placed = slots(cursor)
-    assert len(placed) == 8
-    assert max(placed.values()) == 10
-    assert "p9.pdf" not in placed
+    assert len(placed) == 13
+    assert all(name in placed for name in names)
+
+
+def test_an_attached_image_is_not_mistaken_for_a_preview(tmp_path: Path, opened: Any) -> None:
+    cursor = opened(("OK", "HR-9"))
+    folder = folder_with(tmp_path, "document.pdf", "현장사진.jpg")
+
+    erp.register(
+        folder, sender="보낸이", subject="제목", target=TARGET, body=folder / "document.pdf"
+    )
+
+    assert slots(cursor) == {"document.pdf": 11, "현장사진.jpg": 12}
+
+
+def test_without_a_body_everything_is_an_attachment(tmp_path: Path, opened: Any) -> None:
+    cursor = opened(("OK", "HR-9"))
+
+    erp.register(
+        folder_with(tmp_path, "a.pdf", "b.jpg"), sender="보낸이", subject="제목", target=TARGET
+    )
+
+    assert slots(cursor) == {"a.pdf": 11, "b.jpg": 12}
 
 
 def test_other_attachments_start_at_the_eleventh_slot(tmp_path: Path, opened: Any) -> None:
